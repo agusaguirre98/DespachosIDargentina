@@ -1,0 +1,6 @@
+@import "tailwindcss";
+
+/* (Opcional) ayuda a que la app ocupe toda la pantalla */
+html, body, #root {
+  height: 100%;
+}
