@@ -50,6 +50,11 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
   const [enviando, setEnviando] = useState(false);
   const [procesando, setProcesando] = useState(false);
 
+  // ⬇️ Nuevo: estado para eliminar y para mostrar vínculos
+  const [eliminando, setEliminando] = useState(false);
+  const [checkingLinks, setCheckingLinks] = useState(false);
+  const [linkedCount, setLinkedCount] = useState(0);
+
   // preview PDF
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState("");
   const panelRef = useRef(null);
@@ -103,6 +108,30 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
   useEffect(() => {
     fetchLists();
   }, []);
+
+  // ⬇️ Nuevo: traer cantidad de despachos vinculados a esta factura (vía tabla puente)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!factura?.ID) {
+        setLinkedCount(0);
+        return;
+      }
+      setCheckingLinks(true);
+      try {
+        const r = await fetch(`/api/facturas/${factura.ID}/despachos`);
+        const j = await r.json();
+        if (!alive) return;
+        if (j?.ok && Array.isArray(j.items)) setLinkedCount(j.items.length);
+        else setLinkedCount(0);
+      } catch {
+        if (alive) setLinkedCount(0);
+      } finally {
+        if (alive) setCheckingLinks(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [factura?.ID]);
 
   // Banner y hints: Flete internacional => usar "NO GRAVADO"
   const requiereNoGravado = useMemo(
@@ -206,16 +235,62 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
     }
   };
 
+  // ⬇️ Nuevo: eliminar factura
+  const handleDelete = async () => {
+    if (!factura?.ID) return;
+
+    const warn = linkedCount > 0
+      ? `Esta factura está vinculada a ${linkedCount} despacho(s).
+Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se borran).
+¿Seguro que querés continuar?`
+      : "¿Eliminar esta factura de forma permanente?";
+
+    if (!window.confirm(warn)) return;
+
+    setEliminando(true);
+    setMensaje("");
+    try {
+      const resp = await fetch(`/api/facturas/${factura.ID}`, { method: "DELETE" });
+      const isJson = resp.headers.get("content-type")?.includes("application/json");
+      const data = isJson ? await resp.json() : null;
+      if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
+      volverAtras?.();
+    } catch (e) {
+      setMensaje(`❌ ${e.message || "No se pudo eliminar la factura."}`);
+    } finally {
+      setEliminando(false);
+    }
+  };
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
       {/* Izquierda: Form */}
       <div className="lg:col-span-6">
         <div className="flex items-center justify-between mb-4">
-          <button onClick={volverAtras} className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20">
+          <button
+            onClick={volverAtras}
+            className="px-3 py-1.5 rounded bg-white/10 hover:bg-white/20"
+            disabled={enviando || eliminando}
+          >
             Volver
           </button>
-          <div className="text-sm opacity-80">
-            {factura?.ID ? `Editando #${factura.ID}` : "Nueva factura"}
+
+          <div className="flex items-center gap-3">
+            {/* pill de vínculos */}
+            {factura?.ID && !checkingLinks && (
+              linkedCount > 0 ? (
+                <span className="inline-flex items-center px-2 py-1 rounded-full bg-amber-600/30 border border-amber-400/40 text-xs">
+                  {linkedCount} despacho{linkedCount === 1 ? "" : "s"} vinculado{linkedCount === 1 ? "" : "s"}
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-1 rounded-full bg-emerald-700/30 border border-emerald-400/40 text-xs">
+                  Sin despachos vinculados
+                </span>
+              )
+            )}
+            <div className="text-sm opacity-80">
+              {factura?.ID ? `Editando #${factura.ID}` : "Nueva factura"}
+            </div>
           </div>
         </div>
 
@@ -246,7 +321,7 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
             <button
               type="button"
               onClick={procesarOCR}
-              disabled={!archivo || procesando}
+              disabled={!archivo || procesando || enviando || eliminando}
               className="ml-auto px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50"
             >
               {procesando ? "Procesando…" : "Procesar OCR"}
@@ -355,7 +430,7 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
             <div>
               <label className="text-sm">Orden PO</label>
               <input
-                value={formData.OrdenPO}
+                value={formData.ordenPO /* mantener compat si usabas "ordenPO" en front */ || formData.OrdenPO}
                 onChange={(e) => setField("OrdenPO", e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
               />
@@ -411,17 +486,37 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
             )}
           </div>
 
+          {/* Acciones */}
           <div className="flex gap-2">
             <button
               type="submit"
-              disabled={enviando}
+              disabled={enviando || eliminando}
               className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
             >
               {enviando ? "Guardando…" : "Guardar"}
             </button>
-            <button type="button" onClick={volverAtras} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600">
+
+            <button
+              type="button"
+              onClick={volverAtras}
+              className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600"
+              disabled={enviando || eliminando}
+            >
               Cancelar
             </button>
+
+            {/* Botón ELIMINAR (solo en edición) */}
+            {factura?.ID && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={enviando || eliminando}
+                className="ml-auto px-4 py-2 rounded-lg bg-rose-700 text-white hover:bg-rose-600 disabled:opacity-50"
+                title={linkedCount > 0 ? "Eliminar (también eliminará los vínculos a despachos)" : "Eliminar factura"}
+              >
+                {eliminando ? "Eliminando..." : "Eliminar"}
+              </button>
+            )}
           </div>
 
           {mensaje && <p className="text-sm mt-2">{mensaje}</p>}
