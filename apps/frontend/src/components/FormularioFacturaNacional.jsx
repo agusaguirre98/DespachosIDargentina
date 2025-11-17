@@ -129,7 +129,9 @@ export default function FormularioFacturaNacional({ onCancel, onSave }) {
       proveedor: form.proveedor,
       nroFactura: form.nroFactura,
       descripcion: form.descripcion,
-      ocIds: form.ocIds,
+      ocIds: (Array.isArray(form.ocIds) ? form.ocIds : [])
+        .map((oc) => (typeof oc === "string" ? oc : oc?.OC_ID))
+        .filter((id) => !!id),
       hasDoc: form.hasDoc,
     });
   };
@@ -336,7 +338,16 @@ export default function FormularioFacturaNacional({ onCancel, onSave }) {
               <div><span className="text-slate-600">Proveedor:</span> {form.proveedor || "—"}</div>
               <div><span className="text-slate-600">N° Factura:</span> {form.nroFactura || "—"}</div>
               <div className="col-span-2 sm:col-span-3"><span className="text-slate-600">Descripción:</span> {form.descripcion || "—"}</div>
-              <div className="col-span-2 sm:col-span-3"><span className="text-slate-600">OCs:</span> {form.ocIds.length ? form.ocIds.map((o) => `OC-${o}`).join(", ") : "—"}</div>
+              <div className="col-span-2 sm:col-span-3">
+                <span className="text-slate-600">OCs:</span>{" "}
+                {form.ocIds.length
+                  ? form.ocIds
+                      .map((o) => (typeof o === "string" ? o : o?.OC_ID))
+                      .filter((id) => !!id)
+                      .map((id) => `OC-${id}`)
+                      .join(", ")
+                  : "—"}
+              </div>
             </div>
           </div>
         </div>

@@ -1,13 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import useApi from "../hooks/useApi";
 
 export default function ZFInventoryView() {
   const { get } = useApi();
-  const [rows, setRows] = useState([]);         // inventario ZFI
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [open, setOpen] = useState(new Set());  // zfi_id abiertos
-  const [cache, setCache] = useState({});       // { [zfi_id]: items[] }
+  const [open, setOpen] = useState(new Set());
+  const [cache, setCache] = useState({});
 
   useEffect(() => {
     (async () => {
@@ -15,8 +15,11 @@ export default function ZFInventoryView() {
       try {
         const data = await get("/zf/inventario");
         setRows(data.items || []);
-      } catch (e) { setError(e.message); }
-      finally { setLoading(false); }
+      } catch (e) {
+        setError(e.message || String(e));
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [get]);
 
@@ -31,7 +34,7 @@ export default function ZFInventoryView() {
   };
 
   if (loading) return <div>Cargando inventario…</div>;
-  if (error)   return <div className="text-red-400">❌ {error}</div>;
+  if (error) return <div className="text-red-400">❌ {error}</div>;
 
   return (
     <section className="rounded-xl border border-white/10 bg-white/5 p-4">
@@ -41,68 +44,79 @@ export default function ZFInventoryView() {
           <thead className="bg-white/5 text-slate-300">
             <tr>
               <th className="p-2 w-10"></th>
-              <th className="p-2 text-left">ZFI</th>
-              <th className="p-2 text-left">OC</th>
-              <th className="p-2 text-right">Ingresado</th>
-              <th className="p-2 text-right">Retirado</th>
-              <th className="p-2 text-right">Saldo</th>
+              <th className="p-2 text-left whitespace-nowrap w-48">ZFI</th>
+              <th className="p-2 text-left whitespace-nowrap w-56">OC</th>
+              <th className="p-2 text-right whitespace-nowrap w-28">Ingresado</th>
+              <th className="p-2 text-right whitespace-nowrap w-28">Retirado</th>
+              <th className="p-2 text-right whitespace-nowrap w-28">Saldo</th>
             </tr>
           </thead>
-          <tbody>
-            {rows.map((r) => (
-              <>
-                <tr key={r.ZFI_ID} className="border-t border-white/10">
-                  <td className="p-2">
-                    <button className="px-2 py-1 bg-white/10 rounded"
-                            onClick={() => toggle(r.ZFI_ID)} title="Ver items">
-                      {open.has(r.ZFI_ID) ? "▾" : "▸"}
-                    </button>
-                  </td>
-                  <td className="p-2 font-mono">{r.ZFI_Despacho}</td>
-                  <td className="p-2">{r.OC_ID}</td>
-                  <td className="p-2 text-right">{r.Ingresado}</td>
-                  <td className="p-2 text-right">{r.Retirado}</td>
-                  <td className="p-2 text-right">{r.Saldo}</td>
-                </tr>
 
-                {open.has(r.ZFI_ID) && (
-                  <tr className="bg-black/20">
-                    <td colSpan={6} className="p-0">
-                      <div className="p-3">
-                        {!cache[r.ZFI_ID] ? (
-                          <div className="text-slate-400 text-sm">Cargando items…</div>
-                        ) : cache[r.ZFI_ID].length === 0 ? (
-                          <div className="text-slate-400 text-sm">Sin items.</div>
-                        ) : (
-                          <div className="overflow-x-auto rounded border border-white/10">
-                            <table className="min-w-full text-xs">
-                              <thead className="bg-white/5">
-                                <tr>
-                                  <th className="p-2 text-left">SKU</th>
-                                  <th className="p-2 text-left">Talle</th>
-                                  <th className="p-2 text-left">Descripción</th>
-                                  <th className="p-2 text-right">Unidades</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {cache[r.ZFI_ID].map((it, i) => (
-                                  <tr key={i} className="border-t border-white/10">
-                                    <td className="p-2">{it.SKU}</td>
-                                    <td className="p-2">{it.Talle}</td>
-                                    <td className="p-2">{it.Descripcion}</td>
-                                    <td className="p-2 text-right">{it.CantidadActual}</td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
-                      </div>
+          {/* ✅ un solo <tbody>, sin anidar */}
+          <tbody>
+            {rows.map((r) => {
+              const retirado = Number(r.Retirado || 0);
+              const ingresado = Number(r.Ingresado || 0);
+              const saldo = ingresado - retirado;
+
+              return (
+                <Fragment key={r.ZFI_ID}>
+                  <tr className="border-t border-white/10 align-top">
+                    <td className="p-2">
+                      <button
+                        className="px-2 py-1 bg-white/10 rounded"
+                        onClick={() => toggle(r.ZFI_ID)}
+                        title={open.has(r.ZFI_ID) ? "Ocultar items" : "Ver items"}
+                      >
+                        {open.has(r.ZFI_ID) ? "▾" : "▸"}
+                      </button>
                     </td>
+                    <td className="p-2 font-mono whitespace-nowrap">{r.Despacho || r.ZFI_Despacho}</td>
+                    <td className="p-2 whitespace-nowrap">{r.OC_ID}</td>
+                    <td className="p-2 text-right">{ingresado.toLocaleString()}</td>
+                    <td className="p-2 text-right">{retirado.toLocaleString()}</td>
+                    <td className="p-2 text-right">{saldo.toLocaleString()}</td>
                   </tr>
-                )}
-              </>
-            ))}
+
+                  {open.has(r.ZFI_ID) && (
+                    <tr className="bg-black/20">
+                      <td colSpan={6} className="p-0">
+                        <div className="p-3">
+                          {!cache[r.ZFI_ID] ? (
+                            <div className="text-slate-400 text-sm">Cargando items…</div>
+                          ) : cache[r.ZFI_ID].length === 0 ? (
+                            <div className="text-slate-400 text-sm">Sin items.</div>
+                          ) : (
+                            <div className="overflow-x-auto rounded border border-white/10">
+                              <table className="min-w-full text-xs">
+                                <thead className="bg-white/5">
+                                  <tr>
+                                    <th className="p-2 text-left">SKU</th>
+                                    <th className="p-2 text-left">Talle</th>
+                                    <th className="p-2 text-left">Descripción</th>
+                                    <th className="p-2 text-right whitespace-nowrap">Cantidad actual</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {cache[r.ZFI_ID].map((it, i) => (
+                                    <tr key={i} className="border-t border-white/10">
+                                      <td className="p-2">{it.SKU}</td>
+                                      <td className="p-2">{it.Talle || "-"}</td>
+                                      <td className="p-2">{it.Descripcion}</td>
+                                      <td className="p-2 text-right">{Number(it.CantidadActual || 0).toLocaleString()}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

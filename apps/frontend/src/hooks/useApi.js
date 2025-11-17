@@ -63,7 +63,31 @@ export default function useApi() {
     [buildUrl]
   );
 
-  const get = useCallback((path) => apiFetch(path), [apiFetch]);
+  const get = useCallback(
+    (path, params) => {
+      let finalPath = path;
+      if (params && typeof params === "object") {
+        const searchParams = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+          if (value === undefined || value === null) return;
+          if (Array.isArray(value)) {
+            value.forEach((item) => {
+              if (item === undefined || item === null) return;
+              searchParams.append(key, String(item));
+            });
+          } else {
+            searchParams.append(key, String(value));
+          }
+        });
+        const qs = searchParams.toString();
+        if (qs) {
+          finalPath = `${path}${path.includes("?") ? "&" : "?"}${qs}`;
+        }
+      }
+      return apiFetch(finalPath);
+    },
+    [apiFetch]
+  );
 
   const post = useCallback(
     (path, body) =>

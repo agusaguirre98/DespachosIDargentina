@@ -11,20 +11,23 @@ export default function ZFEDetailView({ zfeId }) {
   const load = async () => {
     setLoading(true); setMsg("");
     try {
-      const d = await get(`/zf/zfe/${zfeId}/lines`);
+      // ✅ tu back expone header+items en /lines/detail
+      const d = await get(`/zf/zfe/${zfeId}/lines/detail`);
       if (!d?.ok) throw new Error(d?.error || "Error detalle ZFE.");
-      setHdr(d.header); setRows(d.items || []);
+      setHdr(d.header || null);
+      setRows(Array.isArray(d.items) ? d.items : []);
     } catch (e) {
       setMsg(`❌ ${e.message}`);
+      setHdr(null); setRows([]);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(()=>{ load(); }, [zfeId]);
+  useEffect(() => { load(); }, [zfeId]);
 
   if (loading) return <div className="text-slate-300">Cargando ZFE…</div>;
-  if (!hdr)     return <div className="text-slate-300">No encontrado.</div>;
+  if (!hdr) return <div className="text-slate-300">No encontrado.</div>;
 
   const total = rows.reduce((acc, r) => acc + (Number(r.CantidadRetiro) || 0), 0);
 

@@ -1,36 +1,62 @@
 import React, { useEffect, useMemo, useState } from "react";
 import useApi from "../hooks/useApi";
+import BuscadorYTotalizador from "./BuscadorYTotalizador";
 
 /**
  * Panel de retiros para ZFE.
  *
  * Props:
- * - zfeId: number | null       -> si es null (modo creación), no intenta leer/guardar líneas en backend
- * - ocId:  string|number       -> OC vinculada (se usa para encontrar el ZFI del grupo)
- * - modoCreacion?: boolean     -> true si estás en CreateDespacho
- * - onDraftChange?: (items) => void  -> callback opcional con los ítems > 0 (para que el padre los guarde luego)
+ * - zfeId: number | null
+ * - ocId:  string|number
+ * - modoCreacion?: boolean
+ * - onDraftChange?: (items) => void
  */
 export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDraftChange }) {
   const { get, post } = useApi();
 
   const [zfiId, setZfiId] = useState(null);
-  const [saldo, setSaldo] = useState([]);   // [{SKU, Talle, Descripcion?, CantidadTotal?, CantidadRetirada?, Saldo}]
-  const [retiros, setRetiros] = useState([]); // estado editable con CantidadRetiro (string/number)
+  const [saldo, setSaldo] = useState([]);     // [{SKU,Talle,Descripcion, Saldo}]
+  const [retiros, setRetiros] = useState([]); // mismo shape + CantidadRetiro
   const [mensaje, setMensaje] = useState("");
   const [cargando, setCargando] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
-  // Busca ZFI_ID a partir de la OC (grupos)
+  // --- Búsqueda ---
+  const [q, setQ] = useState("");
+
+  const normalizar = (s = "") =>
+    s.toString().normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+
+  const filtered = useMemo(() => {
+    if (!q?.trim()) return retiros;
+    const n = normalizar(q);
+    return retiros.filter((r) => {
+      const blob = `${r.SKU} ${r.Talle || ""} ${r.Descripcion || ""}`;
+      return normalizar(blob).includes(n);
+    });
+  }, [retiros, q]);
+
+  // === Resolver ZFI_ID a partir de OC (con fallback) ===
   const fetchZFIFromOC = async () => {
-    const j = await get(`/zf/grupos?oc_id=${encodeURIComponent(ocId)}`);
+    const oc = encodeURIComponent(ocId ?? "");
+    // 1) intentar por grupo (lo “oficial” del flujo)
+    const j = await get(`/zf/grupos?oc_id=${oc}`);
     const gid = Array.isArray(j?.items) ? j.items[0] : null;
-    const _zfiId = gid?.ZFI?.ZFI_ID || null;
-    if (!_zfiId) throw new Error("No se encontró el ZFI vinculado a esta OC.");
-    return _zfiId;
+    const viaGrupo = gid?.ZFI?.ZFI_ID || null;
+    if (viaGrupo) return viaGrupo;
+
+    // 2) fallback: buscar ZFIs por esa OC (más reciente primero)
+    const j2 = await get(`/zf/zfis?oc_id=${oc}`);
+    const items = Array.isArray(j2?.items) ? j2.items : [];
+    if (items.length) return items[0].ZFI_ID;
+
+    throw new Error("No se encontró el ZFI vinculado a esta OC.");
   };
 
   const loadData = async () => {
-    if (!ocId) return;
+    const ocOk = (ocId ?? "").toString().trim();
+    if (!ocOk) return;
+
     setCargando(true);
     setMensaje("");
     try {
@@ -38,38 +64,43 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
       const _zfiId = await fetchZFIFromOC();
       setZfiId(_zfiId);
 
-      // 2) Saldos del ZFI
-      const r = await get(`/zf/zfi/${_zfiId}/saldo`);
-      if (!r?.ok) throw new Error(r?.error || "Error obteniendo saldos.");
+      // 2) Ítems con saldo por SKU/Talle (CantidadActual)
+      const r = await get(`/zf/inventario/${_zfiId}/items`);
+      if (!r?.ok) throw new Error(r?.error || "Error obteniendo ítems del ZFI.");
       const items = Array.isArray(r.items) ? r.items : [];
 
       // 3) Si estamos editando un ZFE existente, cargar retiros previos
       let prevMap = {};
       if (zfeId) {
         const prev = await get(`/zf/zfe/${zfeId}/lines`);
-        (prev?.items || []).forEach(it => {
+        (prev?.items || []).forEach((it) => {
           prevMap[`${it.SKU}__${it.Talle || ""}`] = it.CantidadRetiro;
         });
       }
 
-      const merged = items.map(it => ({
-        ...it,
-        Descripcion: it.Descripcion ?? "",          // por si el saldo no la trae
+      // 4) Merge + mapeo: CantidadActual -> Saldo
+      const merged = items.map((it) => ({
+        SKU: it.SKU,
+        Talle: it.Talle || "",
+        Descripcion: it.Descripcion ?? "",
+        Saldo: Number(it.CantidadActual || 0),
         CantidadRetiro: prevMap[`${it.SKU}__${it.Talle || ""}`] ?? "", // string para input
       }));
 
       setSaldo(merged);
       setRetiros(merged);
+
       // notificar draft al padre (modo creación)
       if (modoCreacion && typeof onDraftChange === "function") {
         const draft = merged
-          .filter(x => parseFloat(x.CantidadRetiro) > 0)
-          .map(x => toPayloadLine(_zfiId, x));
+          .filter((x) => parseFloat(x.CantidadRetiro) > 0)
+          .map((x) => toPayloadLine(_zfiId, x));
         onDraftChange(draft);
       }
     } catch (e) {
       setMensaje(`❌ ${e.message}`);
-      setSaldo([]); setRetiros([]);
+      setSaldo([]);
+      setRetiros([]);
     } finally {
       setCargando(false);
     }
@@ -78,7 +109,7 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
   useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ocId, zfeId]); // cambia sólo si cambian estos
+  }, [ocId, zfeId]);
 
   const toPayloadLine = (zfiIdLocal, r) => ({
     ZFI_ID: zfiIdLocal,
@@ -88,22 +119,57 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
     CantidadRetiro: parseFloat(r.CantidadRetiro || 0),
   });
 
+  // Totales globales (no solo filtrados)
   const totals = useMemo(() => {
     const totalSaldo = saldo.reduce((acc, r) => acc + (parseFloat(r.Saldo) || 0), 0);
     const totalRetiro = retiros.reduce((acc, r) => acc + (parseFloat(r.CantidadRetiro) || 0), 0);
-    return { totalSaldo, totalRetiro };
+    const filasSeleccionadas = retiros.filter((r) => parseFloat(r.CantidadRetiro) > 0).length;
+    return { totalSaldo, totalRetiro, filasSeleccionadas };
   }, [saldo, retiros]);
 
   const handleChange = (idx, value) => {
     const v = value === "" ? "" : Number(value);
     const arr = [...retiros];
-    arr[idx].CantidadRetiro = Number.isFinite(v) ? v : "";
+    // clamp 0..Saldo
+    const disponible = parseFloat(arr[idx].Saldo || 0);
+    let nv = Number.isFinite(v) ? Math.floor(Math.max(0, v)) : "";
+    if (nv !== "" && Number.isFinite(disponible)) {
+      nv = Math.min(nv, disponible);
+    }
+    arr[idx].CantidadRetiro = nv;
     setRetiros(arr);
 
     if (modoCreacion && typeof onDraftChange === "function" && zfiId) {
       const draft = arr
-        .filter(x => parseFloat(x.CantidadRetiro) > 0)
-        .map(x => toPayloadLine(zfiId, x));
+        .filter((x) => parseFloat(x.CantidadRetiro) > 0)
+        .map((x) => toPayloadLine(zfiId, x));
+      onDraftChange(draft);
+    }
+  };
+
+  // Acciones rápidas
+  const limpiarSeleccion = () => {
+    if (!retiros.length) return;
+    const next = retiros.map((r) => ({ ...r, CantidadRetiro: "" }));
+    setRetiros(next);
+    if (modoCreacion && onDraftChange && zfiId) onDraftChange([]);
+  };
+
+  const llenarConDisponiblesFiltrados = () => {
+    if (!filtered.length) return;
+    const map = new Map(filtered.map((r) => [`${r.SKU}__${r.Talle || ""}`, r]));
+    const next = retiros.map((r) => {
+      const key = `${r.SKU}__${r.Talle || ""}`;
+      if (!map.has(key)) return r;
+      const disponible = parseFloat(r.Saldo || 0) || 0;
+      return { ...r, CantidadRetiro: Math.max(0, Math.floor(disponible)) };
+    });
+    setRetiros(next);
+
+    if (modoCreacion && typeof onDraftChange === "function" && zfiId) {
+      const draft = next
+        .filter((x) => parseFloat(x.CantidadRetiro) > 0)
+        .map((x) => toPayloadLine(zfiId, x));
       onDraftChange(draft);
     }
   };
@@ -129,8 +195,8 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
     }
 
     const items = retiros
-      .filter(r => parseFloat(r.CantidadRetiro) > 0)
-      .map(r => toPayloadLine(zfiId, r));
+      .filter((r) => parseFloat(r.CantidadRetiro) > 0)
+      .map((r) => toPayloadLine(zfiId, r));
 
     if (!items.length) {
       setMensaje("No hay cantidades para guardar.");
@@ -142,7 +208,7 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
     try {
       const resp = await post(`/zf/zfe/${zfeId}/lines`, { items });
       if (!resp?.ok) throw new Error(resp?.error || "Error al guardar retiros.");
-      setMensaje(`✅ ${resp.inserted} líneas guardadas correctamente.`);
+      setMensaje(`✅ ${resp.inserted ?? items.length} líneas guardadas correctamente.`);
       await loadData();
     } catch (e) {
       setMensaje(`❌ ${e.message}`);
@@ -151,30 +217,31 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
     }
   };
 
+  const ocLabel = (ocId ?? "").toString().trim();
+
   return (
     <div className="space-y-3">
-      <div className="flex justify-between items-center mb-2">
+      <div className="flex justify-between items-center">
         <span className="text-sm text-slate-400">
-          Fuente: OC #{ocId}. Unidades en <strong>UNIDADES</strong>.
+          Fuente: OC #{ocLabel || "—"}. Unidades en <strong>UNIDADES</strong>.
         </span>
-        <div className="flex gap-2">
-          <button
-            onClick={loadData}
-            disabled={cargando}
-            className="px-3 py-1 rounded-md bg-white/10 border border-white/20 text-sm disabled:opacity-50"
-          >
-            {cargando ? "Actualizando…" : "Refrescar"}
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={guardando || modoCreacion || !zfeId}
-            className="px-3 py-1 rounded-md bg-fuchsia-700 hover:bg-fuchsia-600 text-sm disabled:opacity-50"
-            title={modoCreacion || !zfeId ? "Guardá el despacho para registrar retiros" : "Guardar retiros"}
-          >
-            {guardando ? "Guardando…" : "Guardar retiros"}
-          </button>
-        </div>
       </div>
+
+      {/* Barra con búsqueda + totalizador + acciones */}
+      <BuscadorYTotalizador
+        q={q}
+        onChangeQ={setQ}
+        totalFilas={totals.filasSeleccionadas}
+        totalUnidades={totals.totalRetiro}
+        onRefrescar={loadData}
+        cargando={cargando}
+        onGuardar={handleSave}
+        guardando={guardando}
+        puedeGuardar={totals.totalRetiro > 0 && !!zfeId && !modoCreacion}
+        onLlenarFiltrados={llenarConDisponiblesFiltrados}
+        onLimpiar={limpiarSeleccion}
+        totalItemsVisibles={filtered.length}
+      />
 
       {mensaje && <p className="text-sm text-slate-300">{mensaje}</p>}
 
@@ -191,17 +258,25 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
             </tr>
           </thead>
           <tbody>
-            {retiros.length === 0 ? (
+            {filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="text-center py-3 text-slate-400">
-                  No hay artículos disponibles para retirar.
+                  {retiros.length
+                    ? "No hay artículos que coincidan con la búsqueda."
+                    : "No hay artículos disponibles para retirar."}
                 </td>
               </tr>
             ) : (
-              retiros.map((r, idx) => {
+              filtered.map((r, idx) => {
+                // idx es del filtrado; buscamos el índice real en 'retiros'
+                const realIdx = retiros.findIndex(
+                  (x) => x.SKU === r.SKU && (x.Talle || "") === (r.Talle || "")
+                );
                 const disponible = parseFloat(r.Saldo || 0);
                 const retirar = parseFloat(r.CantidadRetiro || 0);
-                const saldoFinal = (Number.isFinite(disponible) ? disponible : 0) - (Number.isFinite(retirar) ? retirar : 0);
+                const saldoFinal =
+                  (Number.isFinite(disponible) ? disponible : 0) -
+                  (Number.isFinite(retirar) ? retirar : 0);
                 const excedido = Number.isFinite(retirar) && retirar > disponible;
 
                 return (
@@ -212,19 +287,26 @@ export default function ZFERetiroPanel({ zfeId, ocId, modoCreacion = false, onDr
                     <td className="px-2 py-1">{r.SKU}</td>
                     <td className="px-2 py-1">{r.Talle || "-"}</td>
                     <td className="px-2 py-1">{r.Descripcion || ""}</td>
-                    <td className="px-2 py-1 text-right">{Number(disponible).toLocaleString()}</td>
+                    <td className="px-2 py-1 text-right">
+                      {Number(disponible).toLocaleString()}
+                    </td>
                     <td className="px-2 py-1 text-right">
                       <input
                         type="number"
                         min="0"
                         step="1"
                         value={r.CantidadRetiro}
-                        onChange={(e) => handleChange(idx, e.target.value)}
-                        className="w-24 text-right rounded-md bg-white/10 border border-white/10 px-2 py-1 outline-none focus:ring-1 focus:ring-indigo-400"
+                        onChange={(e) => handleChange(realIdx, e.target.value)}
+                        className={`w-24 text-right rounded-md px-2 py-1 outline-none focus:ring-1 ${excedido
+                          ? "bg-red-500/10 border border-red-400 text-red-200 focus:ring-red-400"
+                          : "bg-white/10 border border-white/10 focus:ring-indigo-400"
+                          }`}
                       />
                     </td>
                     <td className={`px-2 py-1 text-right ${excedido ? "text-red-400" : ""}`}>
-                      {Number.isFinite(saldoFinal) ? saldoFinal.toLocaleString() : (r.Saldo || 0).toLocaleString()}
+                      {Number.isFinite(saldoFinal)
+                        ? saldoFinal.toLocaleString()
+                        : (r.Saldo || 0).toLocaleString()}
                     </td>
                   </tr>
                 );

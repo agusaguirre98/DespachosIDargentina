@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
-import OCSearchSelect from "./OCSearchSelect";
+import React, { useEffect, useMemo, useState } from "react";
+import OCSearchSelectMulti from "./OCSearchSelectMulti";
 import useApi from "../hooks/useApi";
 import ZFILinesPanel from "./ZFILinesPanel";
 
 const TIPO_OPCIONES = [
-  { value: "ZFI",  label: "ZFI",  hint: "Ingreso a Zona Franca" },
-  { value: "ZFE",  label: "ZFE",  hint: "Nacionalización" },
+  { value: "ZFI", label: "ZFI", hint: "Ingreso a Zona Franca" },
+  { value: "ZFE", label: "ZFE", hint: "Nacionalización" },
   { value: "IC04", label: "IC04", hint: "Importación directa" },
   { value: "IC05", label: "IC05", hint: "Importación directa" },
 ];
@@ -27,7 +27,7 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
     OC_ID: "",
   });
 
-  const [ocSel, setOcSel] = useState(null);
+  const [ocIds, setOcIds] = useState([]);
   const [mensaje, setMensaje] = useState("");
   const [errors, setErrors] = useState({});
   const [cargando, setCargando] = useState(true);
@@ -47,6 +47,15 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
     if (errors[name]) setErrors((e) => ({ ...e, [name]: undefined }));
   };
 
+  const ocIdList = useMemo(
+    () =>
+      Array.isArray(ocIds)
+        ? ocIds.map((o) => (typeof o === "string" ? o : o?.OC_ID)).filter((id) => !!id)
+        : [],
+    [ocIds]
+  );
+  const primaryOcId = ocIdList[0] || formData.OC_ID || "";
+
   // ====== Carga inicial
   useEffect(() => {
     (async () => {
@@ -54,6 +63,11 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
       try {
         const d = await get(`/api/despachos/${id}`);
 
+        const incomingOcIds = Array.isArray(d?.oc_ids) && d.oc_ids.length
+          ? d.oc_ids.map((oc) => (typeof oc === "string" ? { OC_ID: oc } : oc))
+          : d.OC_ID
+            ? [{ OC_ID: d.OC_ID }]
+            : [];
         setFormData({
           Despacho: d.Despacho ?? "",
           Fecha: d.Fecha ?? "",
@@ -63,9 +77,9 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
           Tipo_Cambio: d.Tipo_Cambio ?? "",
           Arancel: d.Arcanel ?? d.Arancel ?? "",
           TipoDespacho: (d.TipoDespacho ?? "").toUpperCase(),
-          OC_ID: d.OC_ID ?? "",
+          OC_ID: incomingOcIds[0]?.OC_ID ?? "",
         });
-        setOcSel(d.OC_ID ? { OC_ID: d.OC_ID } : null);
+        setOcIds(incomingOcIds);
         setDocInfo({
           HasDoc: !!d.HasDoc,
           DocUrl: d.DocUrl || "",
@@ -106,7 +120,10 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
         Tipo_Cambio: formData.Tipo_Cambio,
         Arancel: formData.Arancel,
         TipoDespacho: (formData.TipoDespacho || "").toUpperCase() || undefined,
-        OC_ID: ocSel?.OC_ID || undefined,
+        OC_ID: primaryOcId || undefined,
+        oc_ids: (Array.isArray(ocIds) ? ocIds : [])
+          .map((oc) => (typeof oc === "string" ? oc : oc?.OC_ID))
+          .filter((id) => !!id),
       };
 
       const resp = await put(`/api/despachos/${id}`, payload);
@@ -265,7 +282,7 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
 
           {ocrPreviewText && (
             <pre className="mt-3 max-h-40 overflow-auto text-xs rounded-lg bg-black/40 p-3">
-{ocrPreviewText}
+              {ocrPreviewText}
             </pre>
           )}
           <p className="text-xs text-slate-400 mt-2">
@@ -286,10 +303,9 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
               <label className="block text-sm mb-1">Nº Despacho *</label>
               <input
                 value={formData.Despacho}
-                onChange={(e)=>setField("Despacho", e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg bg-white/10 border outline-none ${
-                  errors.Despacho ? "border-red-500" : "border-white/20"
-                }`}
+                onChange={(e) => setField("Despacho", e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg bg-white/10 border outline-none ${errors.Despacho ? "border-red-500" : "border-white/20"
+                  }`}
               />
               {errors.Despacho && <p className="text-red-400 text-xs mt-1">{errors.Despacho}</p>}
             </div>
@@ -298,10 +314,9 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
               <input
                 type="date"
                 value={formData.Fecha}
-                onChange={(e)=>setField("Fecha", e.target.value)}
-                className={`w-full px-3 py-2 rounded-lg bg-white/10 border outline-none ${
-                  errors.Fecha ? "border-red-500" : "border-white/20"
-                }`}
+                onChange={(e) => setField("Fecha", e.target.value)}
+                className={`w-full px-3 py-2 rounded-lg bg-white/10 border outline-none ${errors.Fecha ? "border-red-500" : "border-white/20"
+                  }`}
               />
               {errors.Fecha && <p className="text-red-400 text-xs mt-1">{errors.Fecha}</p>}
             </div>
@@ -321,7 +336,7 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
                 <button
                   type="button"
                   key={t.value}
-                  onClick={()=>setField("TipoDespacho", t.value)}
+                  onClick={() => setField("TipoDespacho", t.value)}
                   className={`px-3 py-2 rounded-xl border text-sm
                     ${active ? "bg-indigo-600 border-indigo-500 text-white" : "bg-white/10 border-white/20 hover:bg-white/20"}`}
                   title={t.hint}
@@ -339,14 +354,24 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
             <div className="text-xs uppercase tracking-wide text-slate-400">Paso 3</div>
             <h3 className="text-lg font-semibold">Orden de compra</h3>
           </header>
-        <OCSearchSelect value={ocSel} onChange={setOcSel} />
-          {ocSel && <div className="mt-2 text-xs text-slate-400">OC seleccionada: <strong>{ocSel.OC_ID}</strong></div>}
+          <OCSearchSelectMulti
+            value={ocIds}
+            onChange={setOcIds}
+            placeholder="Buscar OC (por Nro / Proveedor)"
+          />
+          <div className="mt-2 text-xs text-slate-400">
+            {ocIdList.length === 0 ? (
+              "Sin OC seleccionada"
+            ) : (
+              <>OCs seleccionadas: <strong>{ocIdList.join(", ")}</strong></>
+            )}
+          </div>
         </section>
 
         {/* Zona Franca: Artículos del ZFI (cuando es ZFI) */}
         {(formData.TipoDespacho || "").toUpperCase() === "ZFI" && (
           <section className="rounded-2xl border border-white/10 bg-white/5 p-5">
-            <ZFILinesPanel zfiId={Number(id)} ocId={ocSel?.OC_ID || formData.OC_ID} />
+            <ZFILinesPanel zfiId={Number(id)} ocId={primaryOcId} />
           </section>
         )}
 
@@ -358,10 +383,10 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
               <h3 className="text-lg font-semibold">Asociar a ZFI</h3>
             </header>
 
-            {!ocSel?.OC_ID ? (
+            {!primaryOcId ? (
               <div className="text-sm text-slate-400">Seleccioná una OC para listar sus ZFIs.</div>
             ) : (
-              <ZFEAttachToZFI ocId={ocSel.OC_ID} zfeId={Number(id)} />
+              <ZFEAttachToZFI ocId={primaryOcId} zfeId={Number(id)} />
             )}
           </section>
         )}
@@ -374,22 +399,21 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
           </header>
           <div className="grid md:grid-cols-2 gap-4">
             {[
-              ["FOB","FOB"],
-              ["Estadistica","Estadística"],
-              ["Derechos_Importacion","Derechos de Importación"],
-              ["Tipo_Cambio","Tipo de Cambio"],
-              ["Arancel","Arancel SIM IMPO"],
-            ].map(([key,label])=>(
+              ["FOB", "FOB"],
+              ["Estadistica", "Estadística"],
+              ["Derechos_Importacion", "Derechos de Importación"],
+              ["Tipo_Cambio", "Tipo de Cambio"],
+              ["Arancel", "Arancel SIM IMPO"],
+            ].map(([key, label]) => (
               <div key={key}>
                 <label className="block text-sm mb-1">{label}</label>
                 <input
                   type="text"
                   value={formData[key]}
-                  onChange={(e)=>setField(key, e.target.value)}
+                  onChange={(e) => setField(key, e.target.value)}
                   placeholder="Ej: 2.142.234,31"
-                  className={`w-full px-3 py-2 rounded-lg bg-white/10 border outline-none ${
-                    errors[key] ? "border-red-500" : "border-white/20"
-                  }`}
+                  className={`w-full px-3 py-2 rounded-lg bg-white/10 border outline-none ${errors[key] ? "border-red-500" : "border-white/20"
+                    }`}
                 />
                 {errors[key] && <p className="text-red-400 text-xs mt-1">{errors[key]}</p>}
               </div>
@@ -497,7 +521,7 @@ function ZFEAttachToZFI({ ocId, zfeId }) {
             <select
               className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
               value={groupId}
-              onChange={(e)=>setGroupId(e.target.value)}
+              onChange={(e) => setGroupId(e.target.value)}
             >
               {groups.length === 0 ? (
                 <option value="">(No hay grupos para esta OC)</option>
@@ -525,7 +549,7 @@ function ZFEAttachToZFI({ ocId, zfeId }) {
           <select
             className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
             value={zfiId}
-            onChange={(e)=>setZfiId(e.target.value)}
+            onChange={(e) => setZfiId(e.target.value)}
           >
             <option value="">(Elegir ZFI)</option>
             {zfiList.map(z => (

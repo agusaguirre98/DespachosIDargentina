@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
-import OCSearchSelect from "./OCSearchSelect";
+import OCSearchSelectMulti from "./OCSearchSelectMulti";
 import useApi from "../hooks/useApi";
 import ZFERetiroPanel from "./ZFERetiroPanel";
 
@@ -12,8 +12,8 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 const normalizeDespacho = (s = "") => s.replace(/\s+/g, "").trim().toUpperCase();
 
 const TIPO_OPCIONES = [
-  { value: "ZFI",  label: "ZFI",  hint: "Ingreso a Zona Franca" },
-  { value: "ZFE",  label: "ZFE",  hint: "Nacionalización" },
+  { value: "ZFI", label: "ZFI", hint: "Ingreso a Zona Franca" },
+  { value: "ZFE", label: "ZFE", hint: "Nacionalización" },
   { value: "IC04", label: "IC04", hint: "Importación directa" },
   { value: "IC05", label: "IC05", hint: "Importación directa" },
 ];
@@ -33,13 +33,14 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
     OC_ID: "",
   });
 
-  const [ocSel, setOcSel] = useState(null);
+  // === OCs seleccionadas ===
+  const [ocIds, setOcIds] = useState([]);
 
   // ZF groups / ZFIs (para ZFE)
-  const [zfGroups, setZfGroups]   = useState([]);   // [{ZF_GroupID, ZFI:{ZFI_ID, Despacho, Fecha}}]
+  const [zfGroups, setZfGroups] = useState([]);   // [{ZF_GroupID, ZFI:{ZFI_ID, Despacho, Fecha}}]
   const [zfGroupId, setZfGroupId] = useState("");   // grupo elegido (si existe)
-  const [zfiList, setZfiList]     = useState([]);   // ZFIs disponibles para crear grupo
-  const [zfiId, setZfiId]         = useState("");   // ZFI elegido para crear grupo auto
+  const [zfiList, setZfiList] = useState([]);   // ZFIs disponibles para crear grupo
+  const [zfiId, setZfiId] = useState("");   // ZFI elegido para crear grupo auto
 
   // Duplicado
   const [dupChecking, setDupChecking] = useState(false);
@@ -60,6 +61,18 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
     setFormData((p) => ({ ...p, [name]: v }));
   };
 
+  const ocIdList = useMemo(
+    () =>
+      Array.isArray(ocIds)
+        ? ocIds
+          .map((o) => (typeof o === "string" ? o : o?.OC_ID))
+          .filter((id) => !!id)
+        : [],
+    [ocIds]
+  );
+
+  // OC “principal” (primera de la lista)
+  const primaryOcId = ocIdList[0] || formData.OC_ID || "";
 
   const [draftRetiros, setDraftRetiros] = useState([]);
 
@@ -105,37 +118,54 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!esZFE || !ocSel?.OC_ID) {
-        setZfGroups([]); setZfGroupId(""); setZfiList([]); setZfiId("");
+      if (!esZFE || !primaryOcId) {
+        // limpiar estado si no corresponde
+        if (alive) {
+          setZfGroups([]);
+          setZfGroupId("");
+          setZfiList([]);
+          setZfiId("");
+        }
         return;
       }
 
-      let groupsLocal = [];
-
-      // 1) grupos existentes
       try {
-        const j = await get(`/zf/grupos?oc_id=${encodeURIComponent(ocSel.OC_ID)}`);
+        // 1) grupos ZF
+        const j1 = await get(`/zf/grupos?oc_id=${encodeURIComponent(primaryOcId)}`);
         if (!alive) return;
-        groupsLocal = Array.isArray(j?.items) ? j.items : [];
+        const groupsLocal = Array.isArray(j1?.items) ? j1.items : [];
         setZfGroups(groupsLocal);
-        setZfGroupId(groupsLocal[0]?.ZF_GroupID ? String(groupsLocal[0].ZF_GroupID) : "");
+        if (groupsLocal.length) {
+          setZfGroupId(String(groupsLocal[0].ZF_GroupID));
+        }
       } catch {
-        if (alive) { setZfGroups([]); setZfGroupId(""); }
+        if (alive) {
+          setZfGroups([]);
+          setZfGroupId("");
+        }
       }
 
-      // 2) ZFIs (para crear grupo si no hay)
       try {
-        const j2 = await get(`/zf/zfis?oc_id=${encodeURIComponent(ocSel.OC_ID)}`);
+        // 2) ZFIs vinculados a esa OC
+        const j2 = await get(`/zf/zfis?oc_id=${encodeURIComponent(primaryOcId)}`);
         if (!alive) return;
         const arr = Array.isArray(j2?.items) ? j2.items : [];
         setZfiList(arr);
-        if (!groupsLocal.length && arr.length) setZfiId(String(arr[0].ZFI_ID));
+        if (!zfGroups.length && arr.length) {
+          setZfiId(String(arr[0].ZFI_ID));
+        }
       } catch {
-        if (alive) setZfiList([]);
+        if (alive) {
+          setZfiList([]);
+          setZfiId("");
+        }
       }
     })();
-    return () => { alive = false; };
-  }, [esZFE, ocSel?.OC_ID]); // <- sólo depende de estos valores
+
+    return () => {
+      alive = false;
+    };
+  }, [esZFE, primaryOcId, get]);
 
   // ====== archivo / OCR
   const handleFileChange = (e) => {
@@ -157,12 +187,12 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
       setFormData(prev => ({
         ...prev,
         Despacho: prev.Despacho || normalizeDespacho(sug.Despacho ?? ""),
-        Fecha:    prev.Fecha    || (sug.Fecha ?? ""),
-        FOB:      prev.FOB      || (sug.FOB ?? ""),
-        Estadistica:           prev.Estadistica           || (sug.Estadistica ?? ""),
-        Derechos_Importacion:  prev.Derechos_Importacion  || (sug.Derechos_Importacion ?? ""),
-        Tipo_Cambio:           prev.Tipo_Cambio           || (sug.Tipo_Cambio ?? ""),
-        Arancel:               prev.Arancel               || (sug.Arancel ?? ""),
+        Fecha: prev.Fecha || (sug.Fecha ?? ""),
+        FOB: prev.FOB || (sug.FOB ?? ""),
+        Estadistica: prev.Estadistica || (sug.Estadistica ?? ""),
+        Derechos_Importacion: prev.Derechos_Importacion || (sug.Derechos_Importacion ?? ""),
+        Tipo_Cambio: prev.Tipo_Cambio || (sug.Tipo_Cambio ?? ""),
+        Arancel: prev.Arancel || (sug.Arancel ?? ""),
       }));
       setMensaje("OCR completado. Revisá los datos.");
     } catch (e) {
@@ -174,10 +204,11 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
 
   // ====== helpers ZF
   const createGroupForZFI = async (zfi) => {
-    const j = await post(`/zf/grupos`, { ZFI_ID: Number(zfi), OC_ID: ocSel?.OC_ID });
+    if (!primaryOcId) throw new Error("Seleccioná una OC válida antes de crear el grupo.");
+    const j = await post(`/zf/grupos`, { ZFI_ID: Number(zfi), OC_ID: primaryOcId });
     if (j?.ZF_GroupID || j?.id) return j.ZF_GroupID || j.id;
 
-    const jx = await get(`/zf/grupos?oc_id=${encodeURIComponent(ocSel.OC_ID)}`);
+    const jx = await get(`/zf/grupos?oc_id=${encodeURIComponent(primaryOcId)}`);
     const items = Array.isArray(jx?.items) ? jx.items : [];
     const found = items.find(g => Number(g?.ZFI?.ZFI_ID) === Number(zfi));
     if (found?.ZF_GroupID) return found.ZF_GroupID;
@@ -190,30 +221,49 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
     e.preventDefault();
     setMensaje("");
 
-    if (!formData.Despacho?.trim()) return setMensaje("El Nº de Despacho es obligatorio.");
-    if (!formData.Fecha)             return setMensaje("La Fecha es obligatoria.");
-    if (!formData.TipoDespacho)      return setMensaje("Seleccioná el Tipo de despacho.");
-    if (!ocSel?.OC_ID)               return setMensaje("Seleccioná una Orden de Compra.");
+    if (!formData.Despacho?.trim())
+      return setMensaje("El Nº de Despacho es obligatorio.");
+    if (!formData.Fecha)
+      return setMensaje("La Fecha es obligatoria.");
+    if (!formData.TipoDespacho)
+      return setMensaje("Seleccioná el Tipo de despacho.");
+    if (!ocIdList.length)
+      return setMensaje("Seleccioná al menos una Orden de Compra.");
 
     try {
       const payload = {
         ...formData,
         Despacho: normalizeDespacho(formData.Despacho),
         TipoDespacho: (formData.TipoDespacho || "").toUpperCase(),
-        OC_ID: ocSel?.OC_ID || "",
+        OC_ID: primaryOcId || "",
+        // todas las OCs seleccionadas como strings
+        oc_ids: ocIdList,
       };
 
-      // POST /api/despachos (con archivo)
       const fd = new FormData();
-      Object.entries(payload).forEach(([k, v]) => fd.append(k, v ?? ""));
+
+      Object.entries(payload).forEach(([k, v]) => {
+        if (Array.isArray(v)) {
+          v.forEach((item) => fd.append(`${k}[]`, item ?? ""));
+        } else {
+          fd.append(k, v ?? "");
+        }
+      });
+
       fd.append("tipoDocumento", "Despacho");
-      if (archivo) fd.append("documento", archivo);
-      const j = await upload("/api/despachos", fd);
-      if (!j?.id) throw new Error(j?.error || "Error guardando");
+      if (archivo) {
+        fd.append("documento", archivo);
+      }
 
-      const newId = j.id;
+      const resp = await upload("/api/despachos", fd);
+      if (!resp || resp.ok === false || !resp.id) {
+        throw new Error(resp?.error || "No se pudo crear el despacho.");
+      }
 
-      // Si es ZFE, asociar
+      const newId = resp.id;
+      setMensaje("✅ Despacho creado con éxito.");
+
+      // ====== ZFE: asociar grupo y retiros (lo que ya tenías) ======
       if (esZFE) {
         let gid = zfGroupId;
         if (!gid && zfiId) {
@@ -221,36 +271,43 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
         }
         if (gid) {
           const jj = await post(`/zf/grupos/${gid}/items`, { ZFE_ID: Number(newId) });
-          if (jj?.ok === false) throw new Error(jj?.error || "Se creó el ZFE pero no se pudo asociar al ZFI.");
+          if (jj?.ok === false) {
+            throw new Error(jj?.error || "Se creó el ZFE pero no se pudo asociar al ZFI.");
+          }
         }
       }
 
-      // Si es ZFE, guardar retiros pre-cargados (si los hay)
       if (esZFE && draftRetiros?.length) {
         try {
-          const resp = await post(`/zf/zfe/${newId}/lines`, { items: draftRetiros });
-          console.log(`✅ ${resp?.inserted || 0} líneas de retiro cargadas automáticamente.`);
+          const respLines = await post(`/zf/zfe/${newId}/lines`, { items: draftRetiros });
+          console.log(`… ${respLines?.inserted || 0} líneas de retiro cargadas automáticamente.`);
         } catch (e) {
-          console.warn("⚠️ Error guardando retiros del ZFE recién creado:", e.message);
+          console.warn("??? Error guardando retiros del ZFE recién creado:", e.message);
         }
       }
 
-
-      setMensaje(`Despacho ${payload.Despacho} creado con éxito.`);
-      // limpiar y navegar
+      // limpiar formulario
       setFormData({
-        Despacho: "", Fecha: "", FOB: "", Estadistica: "", Derechos_Importacion: "",
-        Tipo_Cambio: "", Arancel: "", TipoDespacho: "", OC_ID: "",
+        Despacho: "",
+        Fecha: "",
+        FOB: "",
+        Estadistica: "",
+        Derechos_Importacion: "",
+        Tipo_Cambio: "",
+        Arancel: "",
+        TipoDespacho: "",
+        OC_ID: "",
       });
-      setOcSel(null); setArchivo(null);
+      setOcIds([]);
+      setArchivo(null);
       if (pdfPreviewUrl) URL.revokeObjectURL(pdfPreviewUrl);
       setPdfPreviewUrl("");
 
       if (typeof onCreado === "function") onCreado(newId);
       else if (typeof irAEditar === "function") irAEditar(newId);
       else volverAtras?.();
-    } catch (e) {
-      setMensaje(`❌ ${e.message}`);
+    } catch (err) {
+      setMensaje(`❌ ${err.message || "No se pudo conectar con el servidor."}`);
     }
   };
 
@@ -296,10 +353,9 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
                   <label className="block text-sm text-slate-300 mb-1">Nº Despacho *</label>
                   <input
                     value={formData.Despacho}
-                    onChange={(e)=>setField("Despacho", e.target.value)}
-                    className={`w-full rounded-md bg-white/10 border px-3 py-2 outline-none focus:ring-2 ${
-                      dupInfo?.exists ? "border-red-500 focus:ring-red-400" : "border-white/10 focus:ring-indigo-400"
-                    }`}
+                    onChange={(e) => setField("Despacho", e.target.value)}
+                    className={`w-full rounded-md bg-white/10 border px-3 py-2 outline-none focus:ring-2 ${dupInfo?.exists ? "border-red-500 focus:ring-red-400" : "border-white/10 focus:ring-indigo-400"
+                      }`}
                   />
                   {dupChecking && <p className="text-xs text-slate-400 mt-1">Verificando duplicado…</p>}
                   {dupError && <p className="text-xs text-amber-400 mt-1">{dupError}</p>}
@@ -314,7 +370,7 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
                   <input
                     type="date"
                     value={formData.Fecha}
-                    onChange={(e)=>setField("Fecha", e.target.value)}
+                    onChange={(e) => setField("Fecha", e.target.value)}
                     className="w-full rounded-md bg-white/10 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-400"
                   />
                 </div>
@@ -334,10 +390,9 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
                     <button
                       type="button"
                       key={t.value}
-                      onClick={()=>setField("TipoDespacho", t.value)}
-                      className={`px-3 py-2 rounded-xl border text-sm ${
-                        active ? "bg-indigo-600 border-indigo-500 text-white" : "bg-white/10 border-white/20 hover:bg-white/20"
-                      }`}
+                      onClick={() => setField("TipoDespacho", t.value)}
+                      className={`px-3 py-2 rounded-xl border text-sm ${active ? "bg-indigo-600 border-indigo-500 text-white" : "bg-white/10 border-white/20 hover:bg-white/20"
+                        }`}
                       title={t.hint}
                     >
                       {t.label}
@@ -350,12 +405,28 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
             {/* Paso 3: OC */}
             <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
               <header className="mb-3">
-                <div className="text-xs uppercase tracking-wide text-slate-400">Paso 3</div>
+                <div className="text-xs uppercase tracking-wide text-slate-400">
+                  PASO 3
+                </div>
                 <h3 className="text-lg font-semibold">Orden de compra *</h3>
               </header>
-              <OCSearchSelect value={ocSel} onChange={setOcSel} />
+
+              {/* chips + buscador */}
+              <OCSearchSelectMulti
+                value={ocIds}
+                onChange={setOcIds}
+                placeholder="Buscar OC (por Nro / Proveedor)"
+              />
+
               <div className="mt-2 text-xs text-slate-400">
-                {ocSel ? <>OC seleccionada: <strong>{ocSel.OC_ID}</strong></> : "Sin OC seleccionada"}
+                {ocIdList.length === 0 ? (
+                  <>Sin OC seleccionada</>
+                ) : (
+                  <>
+                    OCs seleccionadas:{" "}
+                    <strong>{ocIdList.join(", ")}</strong>
+                  </>
+                )}
               </div>
             </section>
 
@@ -367,39 +438,39 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
                   <h3 className="text-lg font-semibold">Asociar a ZFI</h3>
                 </header>
                 {esZFE && (
-                    <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                      <header className="mb-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-400">Paso 3B</div>
-                        <h3 className="text-lg font-semibold">Asociar a ZFI</h3>
-                      </header>
-                      ...
-                    </section>
-                  )}
+                  <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <header className="mb-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-400">Paso 3B</div>
+                      <h3 className="text-lg font-semibold">Asociar a ZFI</h3>
+                    </header>
+                    ...
+                  </section>
+                )}
 
-                  {esZFE && (
-                    <section className="rounded-2xl border border-white/10 bg-white/5 p-5 mt-4">
-                      <header className="mb-3">
-                        <div className="text-xs uppercase tracking-wide text-slate-400">Zona Franca</div>
-                        <h3 className="text-lg font-semibold">Artículos retirados</h3>
-                      </header>
+                {esZFE && (
+                  <section className="rounded-2xl border border-white/10 bg-white/5 p-5 mt-4">
+                    <header className="mb-3">
+                      <div className="text-xs uppercase tracking-wide text-slate-400">Zona Franca</div>
+                      <h3 className="text-lg font-semibold">Artículos retirados</h3>
+                    </header>
 
-                      {!ocSel?.OC_ID ? (
-                        <div className="text-sm text-slate-400">
-                          Seleccioná una OC para ver los artículos disponibles.
-                        </div>
-                      ) : (
-                        <ZFERetiroPanel
-                            zfeId={null}
-                            ocId={ocSel.OC_ID}
-                            modoCreacion={true}
-                            onDraftChange={(items) => setDraftRetiros(items)}  // guardalo en state del padre
-                          />
-                      )}
-                    </section>
-                  )}
+                    {!primaryOcId ? (
+                      <div className="text-sm text-slate-400">
+                        Seleccioná una OC para ver los artículos disponibles.
+                      </div>
+                    ) : (
+                      <ZFERetiroPanel
+                        zfeId={null}
+                        ocId={primaryOcId}
+                        modoCreacion={true}
+                        onDraftChange={(items) => setDraftRetiros(items)}  // guardalo en state del padre
+                      />
+                    )}
+                  </section>
+                )}
 
 
-                {!ocSel?.OC_ID ? (
+                {!primaryOcId ? (
                   <div className="text-sm text-slate-400">Primero seleccioná una OC para listar sus ZFIs.</div>
                 ) : (
                   <div className="grid md:grid-cols-2 gap-4">
@@ -409,7 +480,7 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
                         <select
                           className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
                           value={zfGroupId}
-                          onChange={(e)=>setZfGroupId(e.target.value)}
+                          onChange={(e) => setZfGroupId(e.target.value)}
                         >
                           {zfGroups.length === 0 ? (
                             <option value="">(No hay grupos para esta OC)</option>
@@ -425,15 +496,15 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
                           type="button"
                           onClick={async () => {
                             try {
-                              const j = await get(`/zf/grupos?oc_id=${encodeURIComponent(ocSel.OC_ID)}`);
+                              const j = await get(`/zf/grupos?oc_id=${encodeURIComponent(primaryOcId)}`);
                               const groups = Array.isArray(j?.items) ? j.items : [];
                               setZfGroups(groups);
                               setZfGroupId(groups[0]?.ZF_GroupID ? String(groups[0].ZF_GroupID) : "");
-                              const j2 = await get(`/zf/zfis?oc_id=${encodeURIComponent(ocSel.OC_ID)}`);
+                              const j2 = await get(`/zf/zfis?oc_id=${encodeURIComponent(primaryOcId)}`);
                               const arr = Array.isArray(j2?.items) ? j2.items : [];
                               setZfiList(arr);
                               if (!groups.length && arr.length) setZfiId(String(arr[0].ZFI_ID));
-                            } catch {}
+                            } catch { }
                           }}
                           className="px-2 py-1 text-xs rounded bg-white/10 border border-white/20"
                         >
@@ -447,7 +518,7 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
                       <select
                         className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
                         value={zfiId}
-                        onChange={(e)=>setZfiId(e.target.value)}
+                        onChange={(e) => setZfiId(e.target.value)}
                       >
                         <option value="">(Elegir ZFI)</option>
                         {zfiList.map(z => (
@@ -473,17 +544,17 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
               </header>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {[
-                  ["FOB","FOB"], ["Estadistica","Estadística"],
-                  ["Derechos_Importacion","Derechos de Importación"],
-                  ["Tipo_Cambio","Tipo de Cambio"], ["Arancel","Arancel SIM IMPO"],
-                ].map(([name,label]) => (
+                  ["FOB", "FOB"], ["Estadistica", "Estadística"],
+                  ["Derechos_Importacion", "Derechos de Importación"],
+                  ["Tipo_Cambio", "Tipo de Cambio"], ["Arancel", "Arancel SIM IMPO"],
+                ].map(([name, label]) => (
                   <div key={name}>
                     <label className="block text-sm text-slate-300 mb-1">{label}</label>
                     <input
                       type="text"
                       name={name}
                       value={formData[name]}
-                      onChange={(e)=>setField(name, e.target.value)}
+                      onChange={(e) => setField(name, e.target.value)}
                       placeholder="Ej: 2.142.234,31"
                       className="w-full rounded-md bg-white/10 border border-white/10 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-400"
                     />
@@ -496,9 +567,8 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
               <button
                 type="submit"
                 disabled={procesando || dupChecking || dupInfo?.exists}
-                className={`px-4 py-2 rounded-md text-white font-medium ${
-                  dupInfo?.exists ? "bg-gray-600 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-500"
-                }`}
+                className={`px-4 py-2 rounded-md text-white font-medium ${dupInfo?.exists ? "bg-gray-600 cursor-not-allowed" : "bg-emerald-600 hover:bg-emerald-500"
+                  }`}
               >
                 Guardar Despacho
               </button>
@@ -519,7 +589,7 @@ export default function CreateDespacho({ volverAtras, onCreado, irAEditar }) {
               <div className="flex-1 overflow-auto rounded-md bg-black/60">
                 {pdfPreviewUrl ? (
                   <Document file={pdfPreviewUrl} loading={<div className="text-slate-300 p-4">Cargando PDF…</div>}>
-                    <Page pageNumber={3} width={panelWidth} renderTextLayer={false} renderAnnotationLayer={false}/>
+                    <Page pageNumber={3} width={panelWidth} renderTextLayer={false} renderAnnotationLayer={false} />
                   </Document>
                 ) : (
                   <div className="text-slate-400 p-4">Seleccioná un PDF para ver la página 3 aquí.</div>
