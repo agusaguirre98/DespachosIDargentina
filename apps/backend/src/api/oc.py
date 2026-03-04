@@ -34,7 +34,8 @@ def oc_debug():
     sql = text(
         """
         SELECT TOP 25
-            A.REFERENCIA               AS OC_ID,
+            A.OC_ID                    AS OC_ID
+            A.REFERENCIA               AS INNVOICE,
             H.CODIGO                   AS CODPROVEEDOR,
             H.RAZON_SOCIAL             AS RAZON_SOCIAL,
             CONVERT(date, A.FECHA_ALTA) AS FECHAOC
@@ -120,7 +121,8 @@ def oc_select():
 
     sql = text("""
         SELECT TOP 25
-            A.REFERENCIA                 AS OC_ID,
+            A.OC_ID                      AS OC_ID
+            A.REFERENCIA                 AS INNVOICE,
             H.CODIGO                     AS CODPROVEEDOR,
             H.RAZON_SOCIAL               AS RAZON_SOCIAL,
             CONVERT(date, A.FECHA_ALTA)  AS FECHAOC

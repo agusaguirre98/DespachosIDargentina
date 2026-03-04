@@ -17,6 +17,7 @@ class DespachoResumen(db.Model):
     Fecha = db.Column("Fecha", db.Date)
     OC_ID = db.Column("OC_ID", db.String(50), nullable=True)
     TipoDespacho = db.Column("TipoDespacho", db.String(10), nullable=True)
+    Referencia = db.Column("Referencia", db.String(200), nullable=True)
     FOB = db.Column("FOB", db.Float)
     Flete_Internacional = db.Column("Flete_Internacional", db.Float)
     Estadistica = db.Column("Estadistica", db.Float)
@@ -49,6 +50,7 @@ class DespachoOC(db.Model):
         nullable=False,
     )
     oc_id = db.Column("OC_ID", db.String(50), nullable=False)
+    referencia = db.Column("Referencia", db.String(200), nullable=True)
     created_at = db.Column("CreatedAt", db.DateTime, server_default=func.sysdatetime())
 
 

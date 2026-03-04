@@ -105,10 +105,13 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMensaje("");
-
+  
     const eVal = validate();
-    if (Object.keys(eVal).length) { setErrors(eVal); return; }
-
+    if (Object.keys(eVal).length) {
+      setErrors(eVal);
+      return;
+    }
+  
     setEnviando(true);
     try {
       const payload = {
@@ -125,9 +128,13 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
           .map((oc) => (typeof oc === "string" ? oc : oc?.OC_ID))
           .filter((id) => !!id),
       };
-
+  
       const resp = await put(`/api/despachos/${id}`, payload);
-      if (!resp || resp.ok === false) throw new Error(resp?.error || "Error al actualizar.");
+  
+      if (!resp || resp.ok === false) {
+        throw new Error(resp?.error || "Error al actualizar.");
+      }
+  
       setMensaje("✅ Despacho actualizado con éxito.");
       volverAtras?.();
     } catch (err) {
@@ -139,9 +146,13 @@ export default function FormularioEditarDespacho({ id, volverAtras, showOCR }) {
 
   // ====== Borrar
   const handleDelete = async () => {
-    if (!window.confirm("¿Seguro que querés borrar este despacho? Esta acción no se puede deshacer.")) return;
+    if (!window.confirm("¿Seguro que querés borrar este despacho? Esta acción no se puede deshacer.")) {
+      return;
+    }
+  
     setEliminando(true);
     setMensaje("");
+  
     try {
       await del(`/api/despachos/${id}`);
       setMensaje("🗑️ Despacho eliminado.");

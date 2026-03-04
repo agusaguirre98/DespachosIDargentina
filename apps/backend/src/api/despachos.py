@@ -13,7 +13,7 @@ from sqlalchemy import func, text
 from .. import extensions as ext
 eng = ext.init_engine_asignador()
 from ..extensions import db
-from ..models import DespachoOC, DespachoResumen, FacturaDespacho, TipoGasto
+from ..models import DespachoOC, DespachoResumen, Factura, FacturaDespacho, TipoGasto
 from ..services.despachos import (
     add_links,
     parse_despachos_payload,
@@ -284,6 +284,9 @@ def crear_despacho():
                 return jsonify({"error": f"OC_ID inexistente en Asignador: {oc_id}"}), 404
         primary_oc_id = oc_ids[0]
 
+        # Referencia opcional (complemento del OC_ID)
+        referencia = (datos.get("Referencia") or datos.get("referencia") or "").strip() or None
+
         exists = (
             db.session.query(DespachoResumen.ID)
             .filter(func.replace(DespachoResumen.Despacho, " ", "") == nro)
@@ -321,6 +324,7 @@ def crear_despacho():
             HasDoc=bool(uploaded),
             OC_ID=primary_oc_id,
             TipoDespacho=(tipo[:10] or None),
+            Referencia=referencia,
         )
         db.session.add(nuevo)
         db.session.flush()
@@ -340,8 +344,6 @@ def crear_despacho():
         if autoload is not None:
             response_payload["zfi_autoload"] = autoload
         return jsonify(response_payload), 201
-
-
 
     except Exception as exc:
         db.session.rollback()
@@ -379,7 +381,6 @@ def actualizar_despacho(despacho_id: int):
                 if not oc_existe_en_asignador(oc_id):
                     return jsonify({"error": f"OC_ID inexistente en Asignador: {oc_id}"}), 404
 
-
         if archivo:
             site_id, drive_id = _site_ids()
             if not site_id or not drive_id:
@@ -416,6 +417,11 @@ def actualizar_despacho(despacho_id: int):
             "Arancel" in datos or "Arancel_Sim_Impo" in datos
         ) else despacho.Arancel
 
+        # Actualizar Referencia si viene en el payload
+        if "Referencia" in datos or "referencia" in datos:
+            ref_val = (datos.get("Referencia") or datos.get("referencia") or "").strip()
+            despacho.Referencia = ref_val or None
+
         if oc_ids_provided:
             _replace_despacho_oc_links(despacho.ID, oc_ids)
             despacho.OC_ID = oc_ids[0] if oc_ids else None
@@ -442,6 +448,7 @@ def obtener_lista_despachos():
                 DespachoResumen.Despacho,
                 DespachoResumen.TipoDespacho,
                 DespachoResumen.OC_ID,
+                DespachoResumen.Referencia,
                 DespachoResumen.Fecha,
             )
             .order_by(DespachoResumen.Fecha.desc())
@@ -454,6 +461,7 @@ def obtener_lista_despachos():
                     "Despacho": row.Despacho,
                     "TipoDespacho": row.TipoDespacho,
                     "OC_ID": row.OC_ID,
+                    "Referencia": row.Referencia,
                     "Fecha": row.Fecha.isoformat() if row.Fecha else None,
                 }
                 for row in despachos

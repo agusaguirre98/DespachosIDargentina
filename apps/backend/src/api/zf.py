@@ -11,7 +11,8 @@ from sqlalchemy import bindparam, func, text
 from .. import extensions as ext
 eng = ext.init_engine_asignador()
 from ..extensions import db
-from ..models import DespachoResumen, ZFGrupo, ZFVinculo
+from ..models import DespachoResumen, DespachoOC, ZFGrupo, ZFVinculo
+
 from ..services.zf import (
     ensure_zfe,
     ensure_zfi,
@@ -30,21 +31,23 @@ def zf_grupos():
     params = {}
     where = ""
     if oc_id:
-        where = "WHERE UPPER(LTRIM(RTRIM(dzfi.OC_ID))) = UPPER(LTRIM(RTRIM(:oc_id)))"
+        where = "WHERE UPPER(LTRIM(RTRIM(g.OC_ID))) = UPPER(LTRIM(RTRIM(:oc_id)))"
         params["oc_id"] = oc_id
+
 
     sql_grupos = f"""
     SELECT
-      g.ZF_GroupID,
-      g.ZFI_ID,
-      dzfi.Despacho               AS ZFI_Despacho,
-      CAST(dzfi.Fecha AS date)    AS ZFI_Fecha,
-      dzfi.OC_ID
-    FROM dbo.ZF_Grupo AS g
-    JOIN dbo.APP_Despachos_Resumen AS dzfi
-      ON dzfi.ID = g.ZFI_ID
-    {where}
-    ORDER BY g.ZF_GroupID;
+  g.ZF_GroupID,
+  g.ZFI_ID,
+  dzfi.Despacho               AS ZFI_Despacho,
+  CAST(dzfi.Fecha AS date)    AS ZFI_Fecha,
+  g.OC_ID                     AS OC_ID
+FROM dbo.ZF_Grupo AS g
+JOIN dbo.APP_Despachos_Resumen AS dzfi
+  ON dzfi.ID = g.ZFI_ID
+{where}
+ORDER BY g.ZF_GroupID;
+
     """
     grupos = [dict(row) for row in db.session.execute(text(sql_grupos), params).mappings().all()]
     if not grupos:
@@ -99,14 +102,14 @@ def zf_grupos():
     for grupo in grupos:
         items.append(
             {
-                "ZF_GroupID": grupo["ZF_GroupID"],
-                "OC_ID": grupo["OC_ID"],
-                "ZFI": {
-                    "ZFI_ID": grupo["ZFI_ID"],
-                    "Despacho": grupo["ZFI_Despacho"],
-                    "Fecha": grupo["ZFI_Fecha"].isoformat() if grupo["ZFI_Fecha"] else None,
-                },
-                "ZFEs": by_zfi.get(grupo["ZFI_ID"], []),
+                 "ZF_GroupID": grupo["ZF_GroupID"],
+            "OC_ID": grupo["OC_ID"],  # ahora viene de ZF_Grupo.OC_ID
+            "ZFI": {
+                "ZFI_ID": grupo["ZFI_ID"],
+                "Despacho": grupo["ZFI_Despacho"],
+                "Fecha": grupo["ZFI_Fecha"].isoformat() if grupo["ZFI_Fecha"] else None,
+            },
+            "ZFEs": by_zfi.get(grupo["ZFI_ID"], []),
             }
         )
 
@@ -121,7 +124,15 @@ def zf_list_zfis():
         SELECT d.ID AS ZFI_ID, d.Despacho, d.Fecha
         FROM dbo.APP_Despachos_Resumen d
         WHERE UPPER(LTRIM(RTRIM(d.TipoDespacho))) = 'ZFI'
-          AND (:oc = '' OR d.OC_ID = :oc)
+          AND (
+              :oc = ''
+              OR EXISTS (
+                    SELECT 1
+                    FROM dbo.Despacho_OC doc
+                    WHERE doc.Despacho_ID = d.ID
+                      AND doc.OC_ID = :oc
+              )
+          )
         ORDER BY d.Fecha DESC, d.ID DESC
         """
         rows = db.session.execute(text(sql), {"oc": oc_id}).mappings().all()
@@ -150,22 +161,46 @@ def zf_create_group():
         if not zfi_id:
             return jsonify({"ok": False, "error": "ZFI_ID requerido"}), 400
 
+        # Traigo el ZFI
         row = db.session.execute(
             text(
                 """
-            SELECT ID, OC_ID, TipoDespacho
-            FROM dbo.APP_Despachos_Resumen
-            WHERE ID = :id
-            """
+                SELECT ID, TipoDespacho
+                FROM dbo.APP_Despachos_Resumen
+                WHERE ID = :id
+                """
             ),
             {"id": zfi_id},
         ).mappings().first()
+
         if not row or (row["TipoDespacho"] or "").upper() != "ZFI":
             return jsonify({"ok": False, "error": "El despacho indicado no es un ZFI"}), 400
 
-        if oc_id and oc_id != (row["OC_ID"] or ""):
-            return jsonify({"ok": False, "error": "El OC_ID no coincide con el ZFI indicado"}), 400
+        # Traigo TODAS las OCs asociadas al ZFI
+        oc_rows = db.session.execute(
+            text(
+                """
+                SELECT OC_ID
+                FROM dbo.Despacho_OC
+                WHERE Despacho_ID = :id
+                """
+            ),
+            {"id": zfi_id},
+        ).mappings().all()
+        oc_ids = [r["OC_ID"] for r in oc_rows]
 
+        if not oc_ids:
+            return jsonify({"ok": False, "error": "El ZFI no tiene OCs asociadas."}), 400
+
+        # Si vino un OC_ID en el body, valido que pertenezca al ZFI
+        if oc_id:
+            if oc_id not in oc_ids:
+                return jsonify({"ok": False, "error": "El OC_ID no está asociado al ZFI indicado"}), 400
+        else:
+            # Si no vino, uso la primera OC del ZFI como default
+            oc_id = oc_ids[0]
+
+        # Verifico que el ZFI no tenga ya un grupo
         existing = db.session.execute(
             text("SELECT ZF_GroupID FROM dbo.ZF_Grupo WHERE ZFI_ID = :zfi_id"),
             {"zfi_id": zfi_id},
@@ -173,20 +208,22 @@ def zf_create_group():
         if existing:
             return jsonify({"ok": False, "error": "El ZFI ya tiene un grupo asignado."}), 409
 
+        # Creo grupo usando el OC_ID elegido (no el de la columna "principal")
         db.session.execute(
             text(
                 """
-            INSERT INTO dbo.ZF_Grupo (ZFI_ID, OC_ID, CreatedBy)
-            VALUES (:zfi, :oc, :user)
-            """
+                INSERT INTO dbo.ZF_Grupo (ZFI_ID, OC_ID, CreatedBy)
+                VALUES (:zfi, :oc, :user)
+                """
             ),
-            {"zfi": zfi_id, "oc": row["OC_ID"], "user": user},
+            {"zfi": zfi_id, "oc": oc_id, "user": user},
         )
         db.session.commit()
         return jsonify({"ok": True})
     except Exception as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 500
+
 
 
 @zf_bp.post("/grupos/<int:group_id>/items")
@@ -363,15 +400,16 @@ def zfi_saldo(zfi_id: int):
 def zf_inventario():
     sql = """
     SELECT
-        zfi.ZFI_ID,
-        dzfi.Despacho,
-        dzfi.OC_ID,
-        dzfi.Fecha,
-        SUM(CAST(zfi.Cantidad AS float)) AS Ingresado
-    FROM dbo.ZF_ZFI_Lines zfi
-    JOIN dbo.APP_Despachos_Resumen dzfi ON dzfi.ID = zfi.ZFI_ID
-    GROUP BY zfi.ZFI_ID, dzfi.Despacho, dzfi.OC_ID, dzfi.Fecha
-    ORDER BY dzfi.Fecha DESC, dzfi.Despacho;
+    zfi.ZFI_ID,
+    dzfi.Despacho,
+    dzfi.OC_ID,
+    dzfi.Referencia,
+    dzfi.Fecha,
+    SUM(CAST(zfi.Cantidad AS float)) AS Ingresado
+        FROM dbo.ZF_ZFI_Lines zfi
+        JOIN dbo.APP_Despachos_Resumen dzfi ON dzfi.ID = zfi.ZFI_ID
+        GROUP BY zfi.ZFI_ID, dzfi.Despacho, dzfi.OC_ID, dzfi.Referencia, dzfi.Fecha
+        ORDER BY dzfi.Fecha DESC, dzfi.Despacho;
     """
     rows = db.session.execute(text(sql)).mappings().all()
     items = []
@@ -381,6 +419,7 @@ def zf_inventario():
                 "ZFI_ID": row["ZFI_ID"],
                 "Despacho": row["Despacho"],
                 "OC_ID": row["OC_ID"],
+                "Referencia": row["Referencia"],
                 "Fecha": row["Fecha"].isoformat() if row["Fecha"] else None,
                 "Ingresado": float(row["Ingresado"] or 0),
             }
@@ -391,10 +430,11 @@ def zf_inventario():
 @zf_bp.get("/movimientos")
 def zf_movimientos():
     sql = """
-    SELECT
+        SELECT
         rr.ZFE_ID,
         zfe.Despacho                           AS DespachoZFE,
         zfe.OC_ID,
+        zfe.Referencia                         AS ReferenciaZFE,
         CAST(zfe.Fecha AS date)                AS Fecha,
         SUM(CAST(rr.CantidadRetiro AS float))  AS TotalRetirado,
         COUNT(*)                               AS Items,
@@ -402,10 +442,15 @@ def zf_movimientos():
     FROM dbo.ZF_ZFE_Lines AS rr
     JOIN dbo.APP_Despachos_Resumen AS zfe
       ON zfe.ID = rr.ZFE_ID
-    LEFT JOIN dbo.APP_Despachos_Resumen AS zfi      -- 👈 tomamos el ZFI por la FK que ya existe en las líneas
+    LEFT JOIN dbo.APP_Despachos_Resumen AS zfi
       ON zfi.ID = rr.ZFI_ID
     GROUP BY
-        rr.ZFE_ID, zfe.Despacho, zfe.OC_ID, CAST(zfe.Fecha AS date), zfi.Despacho
+        rr.ZFE_ID, 
+        zfe.Despacho, 
+        zfe.OC_ID, 
+        zfe.Referencia, 
+        CAST(zfe.Fecha AS date), 
+        zfi.Despacho
     ORDER BY Fecha DESC, DespachoZFE;
     """
     rows = db.session.execute(text(sql)).mappings().all()
@@ -416,6 +461,7 @@ def zf_movimientos():
                 "ZFE_ID": row["ZFE_ID"],
                 "Despacho": row["DespachoZFE"],
                 "OC_ID": row["OC_ID"],
+                "Referencia": row["ReferenciaZFE"],
                 "Fecha": row["Fecha"].isoformat() if row["Fecha"] else None,
                 "Items": int(row["Items"] or 0),
                 "TotalRetirado": float(row["TotalRetirado"] or 0),
@@ -463,14 +509,15 @@ def zf_zfi_detalle(zfi_id: int):
 def zf_zfi_zfes(zfi_id: int):
     sql = """
     SELECT DISTINCT
-        zfe.ID            AS ZFE_ID,
-        zfe.Despacho      AS Despacho,
-        zfe.OC_ID,
-        CAST(zfe.Fecha AS date) AS Fecha
-    FROM dbo.ZF_ZFE_Lines rl
-    JOIN dbo.APP_Despachos_Resumen zfe ON zfe.ID = rl.ZFE_ID
-    WHERE rl.ZFI_ID = :zfi
-    ORDER BY zfe.Fecha DESC, zfe.Despacho;
+    zfe.ID            AS ZFE_ID,
+    zfe.Despacho      AS Despacho,
+    zfe.OC_ID,
+    zfe.Referencia,
+    CAST(zfe.Fecha AS date) AS Fecha
+        FROM dbo.ZF_ZFE_Lines rl
+        JOIN dbo.APP_Despachos_Resumen zfe ON zfe.ID = rl.ZFE_ID
+        WHERE rl.ZFI_ID = :zfi
+        ORDER BY zfe.Fecha DESC, zfe.Despacho;
     """
     rows = db.session.execute(text(sql), {"zfi": zfi_id}).mappings().all()
     items = []
@@ -480,6 +527,7 @@ def zf_zfi_zfes(zfi_id: int):
                 "ZFE_ID": row["ZFE_ID"],
                 "Despacho": row["Despacho"],
                 "OC_ID": row["OC_ID"],
+                
                 "Fecha": row["Fecha"].isoformat() if row["Fecha"] else None,
             }
         )
@@ -490,12 +538,13 @@ def zf_zfi_zfes(zfi_id: int):
 def zf_zfe_lines(zfe_id: int):
     hdr_sql = """
     SELECT
-        rl.ZF_GroupID,
-        g.ZFI_ID,
-        zfi.Despacho AS DespachoZFI,
-        zfe.Despacho AS DespachoZFE,
-        zfe.OC_ID,
-        CAST(zfe.Fecha AS date) AS Fecha
+    rl.ZF_GroupID,
+    g.ZFI_ID,
+    zfi.Despacho AS DespachoZFI,
+    zfe.Despacho AS DespachoZFE,
+    zfe.OC_ID,
+    zfe.Referencia,
+    CAST(zfe.Fecha AS date) AS Fecha
     FROM dbo.ZF_ZFE_Lines rl
     JOIN dbo.ZF_Grupo g ON g.ZF_GroupID = rl.ZF_GroupID
     JOIN dbo.APP_Despachos_Resumen zfi ON zfi.ID = g.ZFI_ID
@@ -505,7 +554,7 @@ def zf_zfe_lines(zfe_id: int):
     header = db.session.execute(text(hdr_sql), {"zfe": zfe_id}).mappings().first()
     if not header:
         zfe_sql = """
-        SELECT ID, Despacho, OC_ID, CAST(Fecha AS date) AS Fecha
+        SELECT ID, Despacho, OC_ID, Referencia, CAST(Fecha AS date) AS Fecha
         FROM dbo.APP_Despachos_Resumen
         WHERE ID = :zfe
         """
@@ -518,6 +567,7 @@ def zf_zfe_lines(zfe_id: int):
                 "ZFE_ID": zfe["ID"],
                 "DespachoZFE": zfe["Despacho"],
                 "OC_ID": zfe["OC_ID"],
+                "Referencia": header["Referencia"],
                 "Fecha": zfe["Fecha"].isoformat() if zfe["Fecha"] else None,
                 "ZFI_ID": None,
                 "DespachoZFI": None,
@@ -543,6 +593,7 @@ def zf_zfe_lines(zfe_id: int):
             "DespachoZFI": header["DespachoZFI"],
             "DespachoZFE": header["DespachoZFE"],
             "OC_ID": header["OC_ID"],
+            "Referencia": header["Referencia"],
             "Fecha": header["Fecha"].isoformat() if header["Fecha"] else None,
         },
         items=items,

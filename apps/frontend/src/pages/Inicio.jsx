@@ -2,6 +2,9 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
+
+import FacturaServiciosPage from "./FacturaServiciosPage";
+
 import App from '../App.jsx';
 import SelectorModulo from './SelectorModulo.jsx';
 import GastosNacionales from './GastosNacionales.jsx';

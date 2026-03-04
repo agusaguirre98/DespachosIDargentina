@@ -1,6 +1,9 @@
 import { useState, useEffect, useMemo, Suspense, lazy, Fragment } from 'react';
 import { useNavigate } from 'react-router-dom'; // ⬅️ agregado
 
+
+
+
 // ⬇️ NUEVOS componentes (lazy):
 const DespachoCreate = lazy(() => import('./components/DespachoCreate'));
 const ZFGroupManager = lazy(() => import('./components/ZFGroupManager'));
@@ -115,12 +118,22 @@ function App() {
         return;
       }
     }
+  
     setCache(p => ({ ...p, [nro]: { ...(p[nro] || {}), loading: true } }));
+  
     try {
-      const [rf, rr] = await Promise.all([
-        fetch(`/api/despachos/${encodeURIComponent(nro)}/facturas`).then(r => r.json()),
-        fetch(`/api/despachos/${encodeURIComponent(nro)}/resumen-gasto`).then(r => r.json()),
+      const [rfRes, rrRes] = await Promise.all([
+        fetch(`/api/despachos/${encodeURIComponent(nro)}/facturas`),
+        fetch(`/api/despachos/${encodeURIComponent(nro)}/resumen-gasto`)
       ]);
+  
+      if (!rfRes.ok || !rrRes.ok) {
+        throw new Error("Error obteniendo datos del despacho");
+      }
+  
+      const rf = await rfRes.json();
+      const rr = await rrRes.json();
+  
       setCache(p => ({
         ...p,
         [nro]: {
@@ -366,7 +379,7 @@ function App() {
                   Nuevo Despacho
                 </button>
 
-               
+
                 {/* Filtro por vínculos + refrescar conteos */}
                 <div className="flex items-center gap-2 ml-auto">
                   <select
@@ -434,8 +447,8 @@ function App() {
                     <label className="text-xs text-slate-300 mb-1">Texto</label>
                     <input
                       placeholder={searchField === 'ID' ? 'Ej: 123' :
-                                  searchField === 'DESPACHO' ? 'Ej: 25033ZFE...' :
-                                  'Despacho, fecha (YYYY-MM), o ID'}
+                        searchField === 'DESPACHO' ? 'Ej: 25033ZFE...' :
+                          'Despacho, fecha (YYYY-MM), o ID'}
                       className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
                       value={searchText}
                       onChange={(e) => setSearchText(e.target.value)}

@@ -13,6 +13,8 @@ from .api.oc import oc_bp
 from .api.ocr import ocr_bp
 from .api.repositorio import repo_bp
 from .api.zf import zf_bp
+from .api.servicios import servicios_bp   # ⬅️ NUEVO: módulo Nacional (servicios)
+
 from .extensions import db, init_engine_asignador
 from .services import sharepoint as sp
 from .settings import get_settings
@@ -25,7 +27,7 @@ if detected:
 _ENV_CANDIDATES.extend(
     [
         Path(__file__).resolve().parents[1] / ".env",  # apps/backend/.env
-        Path(__file__).resolve().parent / ".env",  # apps/backend/src/.env
+        Path(__file__).resolve().parent / ".env",      # apps/backend/src/.env
     ]
 )
 for env_path in _ENV_CANDIDATES:
@@ -89,6 +91,7 @@ def create_app() -> Flask:
     app.register_blueprint(facturas_bp)
     app.register_blueprint(zf_bp)
     app.register_blueprint(repo_bp)
+    app.register_blueprint(servicios_bp)   # ⬅️ NUEVO: circuito nacional
 
     for rule in app.url_map.iter_rules():
         app.logger.info("ROUTE %s -> %s", rule.rule, rule.endpoint)

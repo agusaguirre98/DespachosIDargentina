@@ -99,7 +99,16 @@ const FormularioFactura = ({ volverAtras }) => {
           fetch("/api/tipos-gasto"),
           fetch("/api/despachos/list"),
         ]);
-        const [tipos, desp] = await Promise.all([rTipos.json(), rDesp.json()]);
+  
+        if (!rTipos.ok || !rDesp.ok) {
+          throw new Error("Error cargando listas");
+        }
+  
+        const [tipos, desp] = await Promise.all([
+          rTipos.json(),
+          rDesp.json()
+        ]);
+  
         setTiposGastoList(Array.isArray(tipos) ? tipos : []);
         setDespachosList(Array.isArray(desp) ? desp : []);
       } catch {
@@ -108,6 +117,7 @@ const FormularioFactura = ({ volverAtras }) => {
         setCargandoListas(false);
       }
     };
+  
     fetchLists();
   }, []);
 

@@ -6,18 +6,18 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true, // Esto permite que se vea en la red
     proxy: {
-      // Backend Flask
       '/api': {
-        target: 'http://127.0.0.1:5000',
+        target: 'http://192.168.5.4:5000', // Cambiado a la IP del servidor
         changeOrigin: true,
       },
       '/zf': {
-        target: 'http://127.0.0.1:5000',
+        target: 'http://192.168.5.4:5000', // Cambiado a la IP del servidor
         changeOrigin: true,
       },
       '/oc': {
-        target: 'http://127.0.0.1:5000',
+        target: 'http://192.168.5.4:5000', // Cambiado a la IP del servidor
         changeOrigin: true,
       },
     },
