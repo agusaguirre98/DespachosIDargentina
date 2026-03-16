@@ -9,15 +9,15 @@ export default defineConfig({
     host: true, // Esto permite que se vea en la red
     proxy: {
       '/api': {
-        target: 'http://192.168.5.4:5000', // Cambiado a la IP del servidor
+        target: 'http://localhost:5000', // Cambiado a la IP del servidor
         changeOrigin: true,
       },
       '/zf': {
-        target: 'http://192.168.5.4:5000', // Cambiado a la IP del servidor
+        target: 'http://localhost:5000', // Cambiado a la IP del servidor
         changeOrigin: true,
       },
       '/oc': {
-        target: 'http://192.168.5.4:5000', // Cambiado a la IP del servidor
+        target: 'http://localhost:5000', // Cambiado a la IP del servidor
         changeOrigin: true,
       },
     },

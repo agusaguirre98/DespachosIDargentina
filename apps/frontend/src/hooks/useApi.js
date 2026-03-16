@@ -4,8 +4,7 @@ import { useCallback, useMemo } from "react";
 export default function useApi() {
   // Normalizo BASE y permito absoluto (http/https) en cada request
   const API_BASE = useMemo(() => {
-    const base = "http://192.168.5.4:5000";
-    return base.replace(/\/+$/, ""); // sin barra final
+    return ""; // base relativa
   }, []);
 
   const buildUrl = useCallback((path) => {

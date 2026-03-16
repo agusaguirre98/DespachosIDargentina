@@ -9,6 +9,14 @@ from PIL import Image, ImageFilter, ImageEnhance
 import numpy as np
 import fitz  # PyMuPDF
 import easyocr
+import os
+import sys
+
+os.environ["PYTHONIOENCODING"] = "utf-8"
+os.environ["DISABLE_TQDM"] = "1"
+
+sys.stdout.reconfigure(encoding='utf-8')
+sys.stderr.reconfigure(encoding='utf-8')
 
 try:
     import cv2
@@ -84,7 +92,7 @@ _READER: Optional[easyocr.Reader] = None
 def get_reader() -> easyocr.Reader:
     global _READER
     if _READER is None:
-        _READER = easyocr.Reader(EASYOCR_LANGS, gpu=False)
+        _READER = easyocr.Reader(EASYOCR_LANGS, gpu=False, verbose=False)
     return _READER
 
 def ocr_with_boxes(pil: Image.Image) -> List[dict]:

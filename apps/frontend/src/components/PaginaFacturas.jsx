@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import FormularioFactura from "../components/FormularioFactura";
 import FormularioEditarFactura from "../components/FormularioEditarFactura";
+import ErrorBoundary from "./ErrorBoundary";
 
 const DEFAULT_LIMIT = 100;
 
@@ -9,14 +10,23 @@ const PaginaFacturas = () => {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
-  const [modo, setModo] = useState("list"); // "list" | "create" | "edit"
+  const [modo, setModo] = useState("list");
   const [facturaEdit, setFacturaEdit] = useState(null);
 
-  // Filtros/controles
   const [soloSinDespacho, setSoloSinDespacho] = useState(false);
-  const [order, setOrder] = useState("fecha_desc"); // fecha_desc | fecha_asc | id_desc | id_asc | importe_desc | importe_asc
+  const [order, setOrder] = useState("fecha_desc");
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [page, setPage] = useState(1);
+
+  const [searchText, setSearchText] = useState("");
+
+  const selectClasses =
+    "px-3 py-1.5 rounded-lg bg-slate-900 border border-white/20 text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/60";
+
+  const optionClasses = "bg-slate-900 text-slate-100";
+
+  const inputClasses =
+    "w-full px-4 py-2 rounded-lg bg-slate-900 border border-white/20 text-slate-100 placeholder:text-slate-500 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/60";
 
   const fetchFacturas = async () => {
     try {
@@ -27,7 +37,6 @@ const PaginaFacturas = () => {
       params.set("order", order);
       params.set("limit", String(limit));
       params.set("offset", String((page - 1) * limit));
-      // Enviamos only_unlinked para que el SQL ya agrupe por vínculos
       if (soloSinDespacho) params.set("only_unlinked", "1");
 
       const r = await fetch(`/api/facturas/with-links?${params.toString()}`);
@@ -43,10 +52,8 @@ const PaginaFacturas = () => {
     }
   };
 
-  // Cargar al entrar y ante cambios de filtros/paginación
   useEffect(() => {
     fetchFacturas();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [soloSinDespacho, order, limit, page]);
 
   const volverListado = () => {
@@ -55,25 +62,40 @@ const PaginaFacturas = () => {
     fetchFacturas();
   };
 
-  // Filtro adicional en el cliente:
-  // Cuando "soloSinDespacho" está activo, además de LinkedCount===0
-  // ocultamos las que tienen texto en la columna de compatibilidad `Despacho`.
-  const rows = useMemo(() => {
+  const baseRows = useMemo(() => {
     if (!soloSinDespacho) return items;
     return items.filter(
       (f) => (f.LinkedCount ?? 0) === 0 && !(f.Despacho || "").trim()
     );
   }, [items, soloSinDespacho]);
 
+  const rows = useMemo(() => {
+    if (!searchText.trim()) return baseRows;
+
+    const q = searchText.toLowerCase();
+
+    return baseRows.filter((f) =>
+      (f.Proveedor || "").toLowerCase().includes(q) ||
+      (f.nroFactura || f.Invoice || "").toLowerCase().includes(q) ||
+      (f.Despacho || "").toLowerCase().includes(q) ||
+      (f.Fecha || "").toLowerCase().includes(q) ||
+      (f.TipoGastoNombre || "").toLowerCase().includes(q) ||
+      String(f.Importe || "").toLowerCase().includes(q)
+    );
+  }, [baseRows, searchText]);
+
   if (modo === "create") {
-   return (
+    return (
       <div className="max-w-7xl mx-auto">
-        <FormularioFactura volverAtras={volverListado} />
+        <ErrorBoundary>
+         <FormularioFactura volverAtras={volverListado} />
+        </ErrorBoundary>
       </div>
     );
   }
+
   if (modo === "edit") {
-  return (
+    return (
       <div className="max-w-7xl mx-auto">
         <FormularioEditarFactura volverAtras={volverListado} factura={facturaEdit} />
       </div>
@@ -83,7 +105,7 @@ const PaginaFacturas = () => {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-3xl font-bold">Facturas</h1>
+        <h1 className="text-3xl font-bold text-slate-100">Facturas</h1>
 
         <div className="flex items-center gap-3">
           <label className="inline-flex items-center gap-2 text-sm text-slate-200 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5">
@@ -96,63 +118,28 @@ const PaginaFacturas = () => {
                 setSoloSinDespacho(e.target.checked);
               }}
             />
-            {/* aclaramos criterio: sin vínculo y sin texto */}
             Mostrar solo sin despacho
           </label>
 
           <select
-            className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 outline-none"
+            className={selectClasses}
             value={order}
             onChange={(e) => {
               setPage(1);
               setOrder(e.target.value);
             }}
-            title="Ordenar"
           >
-            <option value="fecha_desc">Fecha ↓</option>
-            <option value="fecha_asc">Fecha ↑</option>
-            <option value="id_desc">ID ↓</option>
-            <option value="id_asc">ID ↑</option>
-            <option value="importe_desc">Importe ↓</option>
-            <option value="importe_asc">Importe ↑</option>
+            <option value="fecha_desc" className={optionClasses}>Fecha ↓</option>
+            <option value="fecha_asc" className={optionClasses}>Fecha ↑</option>
+            <option value="id_desc" className={optionClasses}>ID ↓</option>
+            <option value="id_asc" className={optionClasses}>ID ↑</option>
+            <option value="importe_desc" className={optionClasses}>Importe ↓</option>
+            <option value="importe_asc" className={optionClasses}>Importe ↑</option>
           </select>
-
-          <select
-            className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 outline-none"
-            value={limit}
-            onChange={(e) => {
-              setPage(1);
-              setLimit(Number(e.target.value) || DEFAULT_LIMIT);
-            }}
-            title="Filas por página"
-          >
-            {[50, 100, 200, 500].map((n) => (
-              <option key={n} value={n}>{n}</option>
-            ))}
-          </select>
-
-          <div className="inline-flex items-center gap-1">
-            <button
-              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1}
-              title="Página anterior"
-            >
-              ◀
-            </button>
-            <span className="px-2">{page}</span>
-            <button
-              className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20"
-              onClick={() => setPage((p) => p + 1)}
-              title="Página siguiente"
-            >
-              ▶
-            </button>
-          </div>
 
           <button
             onClick={fetchFacturas}
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20"
+            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-slate-100"
           >
             Refrescar
           </button>
@@ -169,10 +156,23 @@ const PaginaFacturas = () => {
         </div>
       </div>
 
+      <div className="mb-4">
+        <input
+          type="text"
+          placeholder="Buscar por proveedor, factura, despacho, fecha..."
+          value={searchText}
+          onChange={(e) => {
+            setPage(1);
+            setSearchText(e.target.value);
+          }}
+          className={inputClasses}
+        />
+      </div>
+
       {error && <div className="mb-3 p-3 rounded-lg bg-red-900/30">{error}</div>}
 
       {cargando ? (
-        <p>Cargando…</p>
+        <p className="text-slate-300">Cargando…</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="min-w-full text-sm">
@@ -201,23 +201,7 @@ const PaginaFacturas = () => {
                   <td className="p-3 text-right">
                     {typeof f.Importe === "number"
                       ? f.Importe.toLocaleString("es-AR", { minimumFractionDigits: 2 })
-                      : (f.Importe || "")}
-                  </td>
-                  <td className="p-3">
-                    {f.HasDoc && f.DocUrl ? (
-                      <a
-                        href={f.DocUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={f.DocName || "Abrir adjunto"}
-                        className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200 underline"
-                      >
-                        <span aria-hidden>📎</span>
-                        <span className="text-xs">Abrir</span>
-                      </a>
-                    ) : (
-                      <span className="text-slate-400 text-xs">—</span>
-                    )}
+                      : f.Importe || ""}
                   </td>
                   <td className="p-3">{f.Despacho || ""}</td>
                   <td className="p-3">
@@ -234,19 +218,21 @@ const PaginaFacturas = () => {
                   <td className="p-3">
                     <button
                       className="px-3 py-1 rounded bg-white/10 hover:bg-white/20"
-                      onClick={() => { setFacturaEdit(f); setModo("edit"); }}
+                      onClick={() => {
+                        setFacturaEdit(f);
+                        setModo("edit");
+                      }}
                     >
                       Editar
                     </button>
                   </td>
                 </tr>
               ))}
+
               {!rows.length && (
                 <tr>
                   <td className="p-4 text-center text-slate-400" colSpan={10}>
-                    {soloSinDespacho
-                      ? "No hay facturas sin vínculos y sin texto de despacho."
-                      : "No hay facturas para mostrar."}
+                    No hay facturas para mostrar.
                   </td>
                 </tr>
               )}

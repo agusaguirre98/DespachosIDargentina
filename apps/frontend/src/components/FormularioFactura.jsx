@@ -558,7 +558,7 @@ const FormularioFactura = ({ volverAtras }) => {
                         </span>
                       </Listbox.Button>
                       <Transition
-                        as={Fragment}
+                        as="div"
                         leave="transition ease-in duration-100"
                         leaveFrom="opacity-100"
                         leaveTo="opacity-0"
@@ -687,7 +687,7 @@ const FormularioFactura = ({ volverAtras }) => {
                       </div>
 
                       <Transition
-                        as={Fragment}
+                        as="div"
                         leave="transition ease-in duration-100"
                         leaveFrom="opacity-100"
                         leaveTo="opacity-0"
