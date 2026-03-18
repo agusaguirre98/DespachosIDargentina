@@ -80,7 +80,7 @@ def query_oc_lines(oc_id: str) -> List[Dict[str, Any]]:
             AND AI.ARTICULO_ITEM_ID = F.ARTICULO_ITEM_ID       -- evita multiplicar talles
         LEFT JOIN dbo.ERP_TALLES_ARTICULOS_OPCIONES AS TAO
              ON TAO.TALLE_ARTICULO_OPCION_ID = AI.TALLE_ARTICULO_OPCION_ID
-        WHERE A.REFERENCIA = :oc_id
+        WHERE A.ORDEN_COMPRA_ID = :oc_id
           AND (A.ESTADO IS NULL OR A.ESTADO <> 'ANULADA')
         GROUP BY
             C.CODIGO,
@@ -151,7 +151,7 @@ def oc_existe_en_asignador(oc_id: str) -> bool:
         """
         SELECT 1
         FROM dbo.ERP_ORDENES_COMPRA A
-        WHERE A.REFERENCIA = :oc
+        WHERE A.ORDEN_COMPRA_ID = :oc
         """
     )
     with engine_asignador.connect() as conn:

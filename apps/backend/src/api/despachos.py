@@ -135,7 +135,7 @@ def eliminar_despacho(despacho_id: int):
     try:
         despacho = DespachoResumen.query.get_or_404(despacho_id)
         code = normalize_despacho(despacho.Despacho or "")
-        force = as_bool(request.args.get("force", "0"))
+        tipo = (despacho.TipoDespacho or "").upper()
 
         linked_count = (
             db.session.query(func.count())
@@ -145,40 +145,93 @@ def eliminar_despacho(despacho_id: int):
             or 0
         )
 
-        if linked_count and not force:
-            return (
-                jsonify(
-                    {"ok": False, "error": "El despacho tiene facturas vinculadas.", "linked_count": int(linked_count)}
-                ),
-                409,
+        # 1️⃣ Borrar facturas vinculadas
+        if linked_count:
+            FacturaDespacho.query.filter(
+                FacturaDespacho.despacho_id == despacho_id
+            ).delete(synchronize_session=False)
+
+        # ==========================================
+        # 🔥 LIMPIEZA ZF SEGÚN TIPO
+        # ==========================================
+
+        if tipo == "ZFI":
+
+            # 2️⃣ Borrar líneas ZFI
+            db.session.execute(
+                text("DELETE FROM dbo.ZF_ZFI_Lines WHERE ZFI_ID = :id"),
+                {"id": despacho_id},
             )
 
-        if linked_count:
-            FacturaDespacho.query.filter(FacturaDespacho.despacho_id == despacho_id).delete(synchronize_session=False)
+            # 3️⃣ Obtener grupos del ZFI
+            grupos = db.session.execute(
+                text("SELECT ZF_GroupID FROM dbo.ZF_Grupo WHERE ZFI_ID = :id"),
+                {"id": despacho_id},
+            ).fetchall()
 
-        db.session.delete(despacho)
-        db.session.commit()
+            group_ids = [g[0] for g in grupos]
 
-        try:
+            if group_ids:
+                # 4️⃣ Borrar vínculos asociados a esos grupos
+                db.session.execute(
+                    text("DELETE FROM dbo.ZF_Vinculos WHERE ZF_GroupID IN :groups")
+                    .bindparams(groups=tuple(group_ids))
+                )
+
+            # 5️⃣ Borrar grupos
             db.session.execute(
-                text(
-                    """
+                text("DELETE FROM dbo.ZF_Grupo WHERE ZFI_ID = :id"),
+                {"id": despacho_id},
+            )
+
+        elif tipo == "ZFE":
+
+            # 2️⃣ Borrar vínculos donde este despacho sea ZFE
+            db.session.execute(
+                text("DELETE FROM dbo.ZF_Vinculos WHERE ZFE_ID = :id"),
+                {"id": despacho_id},
+            )
+
+        # ==========================================
+        # 🔥 BORRAR RELACIONES OC
+        # ==========================================
+
+        db.session.query(DespachoOC).filter(
+            DespachoOC.despacho_id == despacho_id
+        ).delete(synchronize_session=False)
+
+        # ==========================================
+        # 🔥 BORRAR RESUMEN GASTO
+        # ==========================================
+
+        db.session.execute(
+            text("""
                 DELETE FROM dbo.App_Despachos_ResumenGasto
                 WHERE REPLACE(UPPER(LTRIM(RTRIM(NroDespacho))), ' ', '') = :nro
-                """
-                ),
-                {"nro": code},
-            )
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+            """),
+            {"nro": code},
+        )
 
-        return jsonify({"ok": True, "deleted_id": despacho_id, "linked_deleted": int(linked_count)})
+        # ==========================================
+        # 🔥 BORRAR DESPACHO
+        # ==========================================
+
+        db.session.execute(
+            text("DELETE FROM dbo.APP_Despachos_Resumen WHERE ID = :id"),
+            {"id": despacho_id},
+        )
+
+        db.session.commit()
+
+        return jsonify({
+            "ok": True,
+            "deleted_id": despacho_id,
+            "linked_deleted": int(linked_count)
+        })
 
     except Exception as exc:
         db.session.rollback()
         return jsonify({"ok": False, "error": str(exc)}), 500
-
 
 @despachos_bp.get("/despachos/links-count")
 def despachos_links_count():
