@@ -2,14 +2,13 @@
 import { useCallback, useMemo } from "react";
 
 export default function useApi() {
-  // Normalizo BASE y permito absoluto (http/https) en cada request
   const API_BASE = useMemo(() => {
-    return ""; // base relativa
+    return "";
   }, []);
 
   const buildUrl = useCallback((path) => {
     if (!path) return API_BASE;
-    if (/^https?:\/\//i.test(path)) return path; // ya es absoluto
+    if (/^https?:\/\//i.test(path)) return path;
     const p = path.startsWith("/") ? path : `/${path}`;
     return `${API_BASE}${p}`;
   }, [API_BASE]);
@@ -25,21 +24,18 @@ export default function useApi() {
         throw new Error(`No se pudo conectar con el servidor (${url}). ${e?.message || ""}`);
       }
 
-      // Content-Type para decidir cómo parsear
       const ct = (res.headers.get("content-type") || "").toLowerCase();
 
-      // 204 No Content -> devolver vacío "válido"
       if (res.status === 204) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return {};
       }
 
-      // Forzamos JSON: si no es JSON, tiramos error con snippet del cuerpo (diagnóstico)
       if (!ct.includes("application/json")) {
         const text = await res.text();
         const snippet = text.slice(0, 300);
         const hint = snippet.includes("<!doctype") || snippet.includes("<html")
-          ? " (parece HTML: probablemente la SPA en vez del endpoint de API; revisá VITE_API_BASE_URL/proxy/ruta)"
+          ? " (parece HTML: probablemente la SPA en vez del endpoint de API)"
           : "";
         throw new Error(`Respuesta no-JSON desde ${url} [${res.status} ${res.statusText}]${hint}\n${snippet}`);
       }
@@ -52,7 +48,6 @@ export default function useApi() {
       }
 
       if (!res.ok) {
-        // Backends que envían {error: "..."} o {message: "..."}
         const msg = data?.error || data?.message || `HTTP ${res.status}`;
         throw new Error(msg);
       }
@@ -114,10 +109,38 @@ export default function useApi() {
     (path, formData) =>
       apiFetch(path, {
         method: "POST",
-        body: formData, // ¡NO pongas Content-Type, la pone el browser!
+        body: formData,
       }),
     [apiFetch]
   );
 
-  return { API_BASE, buildUrl, apiFetch, get, post, put, del, upload };
+  // 🟣 NUEVO: OCR de despachos
+  const ocrDespacho = useCallback(
+    async (file) => {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await upload("/api/despachos/ocr", formData);
+
+      // Log útil para debug
+      console.log("OCR RAW:", res.raw);
+      console.log("OCR SUGGESTED:", res.suggested);
+      console.log("OCR DEBUG:", res.debug);
+
+      return res;
+    },
+    [upload]
+  );
+
+  return {
+    API_BASE,
+    buildUrl,
+    apiFetch,
+    get,
+    post,
+    put,
+    del,
+    upload,
+    ocrDespacho, // 👈 nuevo método
+  };
 }

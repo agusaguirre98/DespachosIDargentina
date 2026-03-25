@@ -19,7 +19,9 @@ const TIPO_OPCIONES = [
 ];
 
 export default function CreateDespacho({ volverAtras, onCreado }) {
-  const { get, upload } = useApi();
+  const { get, upload, ocrDespacho } = useApi(); // 👈 agregado OCR
+
+  const [loadingOCR, setLoadingOCR] = useState(false);
 
   const inputClasses =
     "w-full px-3 py-2 rounded-lg bg-slate-950 border border-white/20 text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/60 outline-none";
@@ -55,8 +57,8 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
     () =>
       Array.isArray(ocIds)
         ? ocIds
-            .map((o) => (typeof o === "string" ? o : o?.OC_ID))
-            .filter(Boolean)
+          .map((o) => (typeof o === "string" ? o : o?.OC_ID))
+          .filter(Boolean)
         : [],
     [ocIds]
   );
@@ -82,9 +84,41 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
     return () => clearTimeout(t);
   }, [formData.Despacho, get]);
 
-  const handleFileChange = (e) => {
+  // 🚀 OCR automático al subir archivo
+  const handleFileChange = async (e) => {
     const f = e.target.files?.[0] || null;
     setArchivo(f);
+
+    if (!f) return;
+
+    try {
+      setLoadingOCR(true);
+      setMensaje("🔍 Procesando OCR...");
+
+      const res = await ocrDespacho(f);
+
+      const d = res?.suggested || {};
+
+      setFormData((prev) => ({
+        ...prev,
+        Despacho: d.Despacho || prev.Despacho,
+        Fecha: d.Fecha || prev.Fecha,
+        FOB: d.FOB || prev.FOB,
+        Estadistica: d.Estadistica || prev.Estadistica,
+        Derechos_Importacion:
+          d.Derechos_Importacion || prev.Derechos_Importacion,
+        Tipo_Cambio: d.Tipo_Cambio || prev.Tipo_Cambio,
+        Arancel: d.Arancel || prev.Arancel,
+        TipoDespacho: d.TipoDespacho || prev.TipoDespacho,
+      }));
+
+      setMensaje("✅ Datos autocompletados con OCR");
+    } catch (err) {
+      console.error(err);
+      setMensaje("⚠ No se pudo procesar el OCR");
+    } finally {
+      setLoadingOCR(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -195,11 +229,7 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
             </option>
 
             {TIPO_OPCIONES.map((t) => (
-              <option
-                key={t.value}
-                value={t.value}
-                className={optionClasses}
-              >
+              <option key={t.value} value={t.value} className={optionClasses}>
                 {t.label}
               </option>
             ))}
@@ -213,8 +243,9 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
           <OCSearchSelectMulti value={ocIds} onChange={setOcIds} />
         </div>
 
+        {/* PDF + OCR */}
         <div>
-          <label className="block text-sm mb-1">PDF despacho</label>
+          <label className="block text-sm mb-1">PDF despacho (OCR)</label>
 
           <input
             id="pdfDespacho"
@@ -236,7 +267,13 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
               {archivo ? archivo.name : "Ningún archivo seleccionado"}
             </span>
           </div>
-</div>
+
+          {loadingOCR && (
+            <div className="text-yellow-400 text-sm mt-2">
+              Procesando OCR...
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-3 pt-3">
           <button

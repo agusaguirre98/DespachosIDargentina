@@ -30,9 +30,50 @@ from ..services.sharepoint import ensure_folder, graph_put, upload_small
 from ..services.tipos_gasto import resolve_tipogasto_id, resolve_tipogasto_name
 from ..services.zf import import_zfi_lines_from_oc as import_zfi_lines_from_oc_service, oc_existe_en_asignador
 from ..utils.parsing import as_bool, normalize_despacho, parse_float, safe_float, to_float_or_none
+from ..services.ocr_despachos import extract_from_pdf
 
 despachos_bp = Blueprint("despachos", __name__, url_prefix="/api")
 
+@despachos_bp.post("/despachos/ocr")
+def ocr_despacho():
+    try:
+        archivo = request.files.get("file")
+        if not archivo:
+            return jsonify({"error": "Archivo requerido"}), 400
+
+        file_bytes = archivo.read()
+
+        raw, suggested, preview_text, debug = extract_from_pdf(file_bytes)
+
+        # ===============================
+        # 🔥 DEBUG OCR (CLAVE)
+        # ===============================
+        print("\n======== OCR TEXT ========")
+        print(preview_text)
+        print("======== END OCR TEXT ========\n")
+
+        print("\n======== OCR RAW ========")
+        print(raw)
+        print("======== END OCR RAW ========\n")
+
+        print("\n======== OCR SUGGESTED ========")
+        print(suggested)
+        print("======== END OCR SUGGESTED ========\n")
+
+        print("\n======== OCR DEBUG ========")
+        print(debug)
+        print("======== END OCR DEBUG ========\n")
+
+        return jsonify({
+            "ok": True,
+            "raw": raw,
+            "suggested": suggested,
+            "preview": preview_text,
+            "debug": debug
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 def _site_ids() -> tuple[str | None, str | None]:
     return current_app.config.get("SITE_ID"), current_app.config.get("DRIVE_ID")
@@ -640,4 +681,7 @@ def get_facturas_linked_por_despacho(despacho_id: int):
                 "Importe": float(row.Importe or 0),
             }
         )
+
+        
+
     return jsonify({"ok": True, "items": items})
