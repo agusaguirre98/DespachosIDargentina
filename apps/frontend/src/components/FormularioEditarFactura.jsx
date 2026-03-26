@@ -352,9 +352,16 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
                 className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
                 required
               >
-                <option value="">Seleccione un Tipo de Gasto</option>
+                <option value="" className="bg-slate-900 text-white">
+                  Seleccione un Tipo de Gasto
+                </option>
+
                 {tiposGastoList.map((t) => (
-                  <option key={t.IdGasto} value={t.TipoGasto}>
+                  <option
+                    key={t.IdGasto}
+                    value={t.TipoGasto}
+                    className="bg-slate-900 text-white"
+                  >
                     {t.TipoGasto}
                   </option>
                 ))}
@@ -402,8 +409,8 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
                 onChange={(e) => setField("Moneda", e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
               >
-                <option value="ARS">ARS</option>
-                <option value="USD">USD</option>
+                <option value="ARS" className="bg-slate-900 text-white">ARS</option>
+                <option value="USD" className="bg-slate-900 text-white">USD</option>
               </select>
             </div>
             <div className="md:col-span-2">
@@ -428,9 +435,14 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
                 onChange={(e) => setField("Despacho", e.target.value)}
                 className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
               >
-                <option value="">(Opcional)</option>
+                <option value="" className="bg-slate-900 text-white">
+                  (Opcional)</option>
                 {despachosList.map((d) => (
-                  <option key={d.ID} value={d.Despacho}>
+                  <option 
+                  key={d.ID} 
+                  value={d.Despacho}
+                  className="bg-slate-900 text-white"
+                  >
                     {d.Despacho}
                   </option>
                 ))}
