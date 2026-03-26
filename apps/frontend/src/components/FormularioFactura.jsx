@@ -2,12 +2,10 @@ import React, { useEffect, useRef, useState, useMemo, Fragment } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Listbox, Combobox, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronUpDownIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import workerSrc from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
 // Worker de pdf.js desde node_modules
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  "/node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
-  import.meta.url
-).toString();
+pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
 
 const PROVEEDORES_NO_GRAVADO = [
   "GESTION FORWARD SRL",
