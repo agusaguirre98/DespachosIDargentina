@@ -199,6 +199,8 @@ function App() {
       }
       case 'OC':
         return getOcDisplay(d).toUpperCase();
+      case 'Referencia':
+        return norm(d.Referencia);
       case 'Despacho':
         return norm(d.Despacho);
       case 'Tipo':
@@ -248,6 +250,7 @@ function App() {
       const nro = norm(d.Despacho);
       const fecha = (d.Fecha || '');
       const ocText = getOcDisplay(d).toUpperCase();
+      const referenciaText = norm(d.Referencia);
 
       if (searchField === 'FECHA') {
         if (!hasRange) return true;
@@ -265,7 +268,7 @@ function App() {
       }
 
       if (!q && !hasRange) return true;
-      const byText = q ? (nro.includes(q) || idStr.includes(searchText.trim()) || fecha.includes(searchText.trim()) || ocText.includes(q)) : true;
+      const byText = q ? (nro.includes(q) || idStr.includes(searchText.trim()) || fecha.includes(searchText.trim()) || ocText.includes(q) || referenciaText.includes(q)) : true;
       const byDate = hasRange ? inRange(fecha) : true;
       return byText && byDate;
     });
@@ -555,6 +558,17 @@ function App() {
                             {renderSortIndicator('OC')}
                           </button>
                         </th>
+                        <th className="py-2 px-3" aria-sort={getAriaSort('Referencia')}>
+                          <button
+                            type="button"
+                            onClick={() => toggleSort('Referencia')}
+                            className="flex items-center gap-2 font-medium text-slate-200 hover:text-white focus:outline-none"
+                            title="Ordenar por referencia"
+                          >
+                            Referencia
+                            {renderSortIndicator('Referencia')}
+                          </button>
+                        </th>
                         <th className="py-2 px-3" aria-sort={getAriaSort('Despacho')}>
                           <button
                             type="button"
@@ -645,6 +659,7 @@ function App() {
                               </td>
                               <td className="py-2 px-3">{d.ID}</td>
                               <td className="py-2 px-3">{getOcDisplay(d) || <span className="text-slate-400 text-xs">-</span>}</td>
+                              <td className="py-2 px-3">{d.Referencia || <span className="text-slate-400 text-xs">-</span>}</td>
                               <td className="py-2 px-3 font-medium">{d.Despacho}</td>
                               {/* Tipo */}
                               <td className="py-2 px-3">
@@ -701,7 +716,7 @@ function App() {
                             {abierto && (
                               <tr className="bg-black/20">
                                 {/* ⬇️ colSpan actualizado: 10 columnas */}
-                                <td colSpan={10} className="p-0">
+                                <td colSpan={11} className="p-0">
                                   <div className="p-4 grid grid-cols-1 lg:grid-cols-12 gap-6">
                                     {/* Facturas */}
                                     <div className="lg:col-span-8">
