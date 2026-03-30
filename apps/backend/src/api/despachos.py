@@ -224,6 +224,39 @@ def _get_oc_ids_for_despacho(despacho_id: int) -> list[str]:
     return [row.oc_id for row in rows]
 
 
+def _get_oc_referencias(oc_ids: Iterable[str]) -> list[str]:
+    ordered_ids = []
+    seen = set()
+    for oc_id in oc_ids or []:
+        val = (oc_id or "").strip()
+        if not val or val in seen:
+            continue
+        ordered_ids.append(val)
+        seen.add(val)
+
+    if not ordered_ids:
+        return []
+
+    params = {f"oc_{idx}": oc_id for idx, oc_id in enumerate(ordered_ids)}
+    placeholders = ", ".join(f":oc_{idx}" for idx in range(len(ordered_ids)))
+    sql = text(f"""
+        SELECT CAST(A.ORDEN_COMPRA_ID AS NVARCHAR(100)) AS OC_ID,
+               A.REFERENCIA AS REFERENCIA
+        FROM dbo.ERP_ORDENES_COMPRA AS A
+        WHERE CAST(A.ORDEN_COMPRA_ID AS NVARCHAR(100)) IN ({placeholders})
+    """)
+
+    with eng.connect() as conn:
+        rows = conn.execute(sql, params).mappings().all()
+
+    by_id = {
+        str(row["OC_ID"]).strip(): (row["REFERENCIA"] or "").strip()
+        for row in rows
+        if row.get("OC_ID") is not None and (row.get("REFERENCIA") or "").strip()
+    }
+    return [by_id[oc_id] for oc_id in ordered_ids if oc_id in by_id]
+
+
 @despachos_bp.delete("/despachos/<int:despacho_id>")
 def eliminar_despacho(despacho_id: int):
     try:
@@ -390,6 +423,7 @@ def obtener_despachos():
             if not oc_links and despacho.OC_ID:
                 oc_links = [despacho.OC_ID]
             data["oc_ids"] = oc_links
+            data["oc_referencias"] = _get_oc_referencias(oc_links)
             items.append(data)
         return jsonify(items)
     except Exception as exc:

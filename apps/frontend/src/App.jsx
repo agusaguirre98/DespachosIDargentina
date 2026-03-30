@@ -191,6 +191,16 @@ function App() {
 
   const getOcDisplay = (d) => getOcIds(d).join(', ');
 
+  const getReferenciaDisplay = (d) => {
+    if (Array.isArray(d?.oc_referencias) && d.oc_referencias.length) {
+      return d.oc_referencias
+        .map((ref) => (ref ?? '').toString().trim())
+        .filter(Boolean)
+        .join(', ');
+    }
+    return (d?.Referencia || '').toString().trim();
+  };
+
   const getSortValue = (d, field) => {
     switch (field) {
       case 'ID': {
@@ -200,7 +210,7 @@ function App() {
       case 'OC':
         return getOcDisplay(d).toUpperCase();
       case 'Referencia':
-        return norm(d.Referencia);
+        return norm(getReferenciaDisplay(d));
       case 'Despacho':
         return norm(d.Despacho);
       case 'Tipo':
@@ -250,7 +260,7 @@ function App() {
       const nro = norm(d.Despacho);
       const fecha = (d.Fecha || '');
       const ocText = getOcDisplay(d).toUpperCase();
-      const referenciaText = norm(d.Referencia);
+      const referenciaText = norm(getReferenciaDisplay(d));
 
       if (searchField === 'FECHA') {
         if (!hasRange) return true;
@@ -659,7 +669,7 @@ function App() {
                               </td>
                               <td className="py-2 px-3">{d.ID}</td>
                               <td className="py-2 px-3">{getOcDisplay(d) || <span className="text-slate-400 text-xs">-</span>}</td>
-                              <td className="py-2 px-3">{d.Referencia || <span className="text-slate-400 text-xs">-</span>}</td>
+                              <td className="py-2 px-3">{getReferenciaDisplay(d) || <span className="text-slate-400 text-xs">-</span>}</td>
                               <td className="py-2 px-3 font-medium">{d.Despacho}</td>
                               {/* Tipo */}
                               <td className="py-2 px-3">
