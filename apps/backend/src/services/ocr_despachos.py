@@ -116,6 +116,8 @@ def norm_date(s: Optional[str]) -> Optional[str]:
 MONEY_RE = r'\d{1,3}(?:[.\s]\d{3})*(?:,\d{2,6})|\d+(?:,\d{2,6})'
 DATE_RE = re.compile(r'\b\d{1,2}[/\.-]\d{1,2}[/\.-]\d{2,4}\b')
 DESPACHO_SUFFIX_RE = r'(?:\s*[A-Z])?'
+FOB_RE = re.compile(r'FOB(?:\s+TOTAL)?[^0-9]{0,25}(' + MONEY_RE + r')')
+COTIZ_RE = re.compile(r'COTIZ[^0-9]{0,25}(' + MONEY_RE + r')')
 
 # ---------------- PDF ----------------
 
@@ -221,43 +223,42 @@ def extract_despacho_raw_fields_from_items(items, extra_text: str = ""):
     full_norm = _strip_accents(full).upper()
     ocr_norm = _strip_accents(ocr_text).upper()
 
-    # ???? FORMATO REAL
     m = re.search(r'\b\d{2}\s+\d{3}\s+ZFEI\s+\d{5,8}' + DESPACHO_SUFFIX_RE + r'\b', full_norm)
     if m:
         data['Ano_Ad_Tipo_NReg_DC'] = m.group(0)
 
-    # ???? GENERICO
     if not data['Ano_Ad_Tipo_NReg_DC']:
         m = re.search(r'\b\d{2}\s+\d{3,5}\s+[A-Z0-9]{3,6}\s+\d{5,8}' + DESPACHO_SUFFIX_RE + r'\b', full_norm)
         if m:
             data['Ano_Ad_Tipo_NReg_DC'] = m.group(0)
 
-    # ???? SIN ESPACIOS
     if not data['Ano_Ad_Tipo_NReg_DC']:
         m = re.search(r'\d{5}ZFE\d{6,8}' + DESPACHO_SUFFIX_RE + r'\b', full_norm)
         if m:
             data['Ano_Ad_Tipo_NReg_DC'] = m.group(0)
 
-    # ---------------- FECHA ----------------
     m = DATE_RE.search(full)
     if m:
         data['Fecha'] = m.group(0)
 
-    # ---------------- FOB ----------------
     for text_norm in [ocr_norm, full_norm]:
-        m = re.search(r'FOB[^0-9]*(' + MONEY_RE + ')', text_norm)
+        m = FOB_RE.search(text_norm)
         if m:
             data['FOB_Total'] = m.group(1)
             break
 
-    # ---------------- COTIZ ----------------
     for text_norm in [ocr_norm, full_norm]:
-        m = re.search(r'COTIZ[^0-9]*(' + MONEY_RE + ')', text_norm)
+        m = COTIZ_RE.search(text_norm)
         if m:
             data['Cotiz'] = m.group(1)
             break
 
     return data
+
+
+def needs_ocr_fallback(raw: Dict[str, Any]) -> bool:
+    required_fields = ["Ano_Ad_Tipo_NReg_DC", "Fecha", "FOB_Total", "Cotiz"]
+    return any(not raw.get(field) for field in required_fields)
 
 # ---------------- MAP ----------------
 
@@ -286,17 +287,19 @@ def map_raw_to_db_fields(raw: Dict[str, Any], full_text: str = "") -> Dict[str, 
 
 def extract_from_pdf(file_bytes):
 
-    pages = pdf_to_pil_images(file_bytes)
     pdf_text = pdf_to_text(file_bytes)
-
+    raw = extract_despacho_raw_fields_from_items([], extra_text=pdf_text)
     all_items = []
 
-    for p in pages:
-        pre = preprocess_pil(p)
-        items = ocr_with_boxes(pre)
-        all_items.extend(items)
+    if needs_ocr_fallback(raw):
+        pages = pdf_to_pil_images(file_bytes)
 
-    raw = extract_despacho_raw_fields_from_items(all_items, extra_text=pdf_text)
+        for p in pages:
+            pre = preprocess_pil(p)
+            items = ocr_with_boxes(pre)
+            all_items.extend(items)
+
+        raw = extract_despacho_raw_fields_from_items(all_items, extra_text=pdf_text)
 
     full_text = " ".join(part for part in [pdf_text, build_full_text(all_items)] if part)
 
@@ -305,9 +308,3 @@ def extract_from_pdf(file_bytes):
     preview = full_text[:1000]
 
     return raw, suggested, preview, {}
-
-
-
-
-
-
