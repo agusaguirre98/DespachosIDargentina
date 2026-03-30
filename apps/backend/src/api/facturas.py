@@ -96,6 +96,7 @@ def _use_resumen_ancho() -> bool:
 def facturas_with_links():
     try:
         only_unlinked = as_bool(request.args.get("only_unlinked", "0"))
+        query = (request.args.get("q") or "").strip()
         try:
             limit = max(1, min(5000, int(request.args.get("limit", 2000))))
         except Exception:
@@ -116,6 +117,20 @@ def facturas_with_links():
         }
         order_clause = order_sql_map.get(order_key, "f.Fecha DESC, f.ID DESC")
         having_clause = "HAVING COUNT(fd.despacho_id) = 0" if only_unlinked else ""
+        where_clause = ""
+        params = {"offset": offset, "limit": limit}
+        if query:
+            where_clause = """
+            WHERE
+                UPPER(COALESCE(f.Proveedor, '')) LIKE UPPER(:query)
+                OR UPPER(COALESCE(f.nroFactura, '')) LIKE UPPER(:query)
+                OR UPPER(COALESCE(f.Invoice, '')) LIKE UPPER(:query)
+                OR UPPER(COALESCE(f.Despacho, '')) LIKE UPPER(:query)
+                OR CONVERT(varchar(10), f.Fecha, 23) LIKE :query
+                OR UPPER(COALESCE(tg.TipoGasto, '')) LIKE UPPER(:query)
+                OR CONVERT(varchar(50), f.Importe) LIKE :query
+            """
+            params["query"] = f"%{query}%"
 
         sql = f"""
         SELECT
@@ -128,6 +143,7 @@ def facturas_with_links():
         FROM dbo.APP_Despachos_Detalles f
         LEFT JOIN dbo.Factura_Despacho fd ON fd.factura_id = f.ID
         LEFT JOIN dbo.TipoGastosBI tg     ON tg.IdGasto = f.TipoGasto
+        {where_clause}
         GROUP BY
             f.ID, f.Fecha, f.Proveedor, f.nroFactura, f.Invoice,
             f.Moneda, f.Importe, f.DocUrl, f.DocName, f.HasDoc,
@@ -142,12 +158,14 @@ def facturas_with_links():
             SELECT f.ID
             FROM dbo.APP_Despachos_Detalles f
             LEFT JOIN dbo.Factura_Despacho fd ON fd.factura_id = f.ID
+            LEFT JOIN dbo.TipoGastosBI tg     ON tg.IdGasto = f.TipoGasto
+            {where_clause}
             GROUP BY f.ID
             {having_clause}
         ) q;
         """
-        rows = db.session.execute(text(sql), {"offset": offset, "limit": limit}).mappings().all()
-        total = db.session.execute(text(count_sql)).scalar() or 0
+        rows = db.session.execute(text(sql), params).mappings().all()
+        total = db.session.execute(text(count_sql), params).scalar() or 0
         items = []
         for row in rows:
             data = dict(row)

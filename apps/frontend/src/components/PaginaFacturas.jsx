@@ -39,6 +39,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
       params.set("limit", String(limit));
       params.set("offset", String((page - 1) * limit));
       if (soloSinDespacho) params.set("only_unlinked", "1");
+      if (searchText.trim()) params.set("q", searchText.trim());
 
       const r = await fetch(`/api/facturas/with-links?${params.toString()}`);
       const j = await r.json();
@@ -57,7 +58,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
 
   useEffect(() => {
     fetchFacturas();
-  }, [soloSinDespacho, order, limit, page]);
+  }, [soloSinDespacho, order, limit, page, searchText]);
 
   const volverListado = () => {
     setFacturaEdit(null);
@@ -65,28 +66,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
     fetchFacturas();
   };
 
-  const baseRows = useMemo(() => {
-    if (!soloSinDespacho) return items;
-    return items.filter(
-      (f) => (f.LinkedCount ?? 0) === 0 && !(f.Despacho || "").trim()
-    );
-  }, [items, soloSinDespacho]);
-
-  const rows = useMemo(() => {
-    if (!searchText.trim()) return baseRows;
-
-    const q = searchText.toLowerCase();
-
-    return baseRows.filter((f) =>
-      (f.Proveedor || "").toLowerCase().includes(q) ||
-      (f.nroFactura || f.Invoice || "").toLowerCase().includes(q) ||
-      (f.Despacho || "").toLowerCase().includes(q) ||
-      (f.Fecha || "").toLowerCase().includes(q) ||
-      (f.TipoGastoNombre || "").toLowerCase().includes(q) ||
-      String(f.Importe || "").toLowerCase().includes(q)
-    );
-  }, [baseRows, searchText]);
-
+  const rows = useMemo(() => items, [items]);
 
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
   const pageToDisplay = Math.min(page, totalPages);
@@ -263,7 +243,6 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
                       ? f.Importe.toLocaleString("es-AR", { minimumFractionDigits: 2 })
                       : f.Importe || ""}
                   </td>
-                  <td className="p-3">{f.Despacho || ""}</td>
                   <td className="p-3">
                     {(f.LinkedCount ?? 0) > 0 ? (
                       <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-emerald-600/30 border border-emerald-400/40">
@@ -271,8 +250,24 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
                       </span>
                     ) : (
                       <span className="inline-flex items-center text-xs px-2 py-0.5 rounded-full bg-rose-600/30 border border-rose-400/40">
-                        Sin vínculo
+                        Sin vinculo
                       </span>
+                    )}
+                  </td>
+                  <td className="p-3">{f.Despacho || ""}</td>
+                  <td className="p-3">
+                    {f.HasDoc && f.DocUrl ? (
+                      <a
+                        href={f.DocUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={f.DocName || "Adjunto disponible"}
+                        className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+                      >
+                        <span className="text-xs">Adjunto disponible</span>
+                      </a>
+                    ) : (
+                      <span className="text-slate-400 text-xs">-</span>
                     )}
                   </td>
                   <td className="p-3">
@@ -305,3 +300,4 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
 };
 
 export default PaginaFacturas;
+
