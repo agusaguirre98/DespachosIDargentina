@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Iterable, Optional, Tuple
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 import msal
 import requests
@@ -98,6 +98,51 @@ def graph_post(url: str, json: dict) -> dict:
     response = _session.post(url, headers=headers, json=json, timeout=DEFAULT_TIMEOUT)
     response.raise_for_status()
     return response.json()
+
+
+def graph_delete(url: str, ignore_not_found: bool = False) -> bool:
+    token = get_access_token()
+    headers = {"Authorization": f"Bearer {token}"}
+    response = _session.delete(url, headers=headers, timeout=DEFAULT_TIMEOUT)
+    if response.status_code == 404 and ignore_not_found:
+        return False
+    response.raise_for_status()
+    return True
+
+
+def delete_file_by_web_url(web_url: str) -> bool:
+    if not web_url:
+        return False
+
+    global DRIVE_ID
+    if not DRIVE_ID:
+        init_site_resources()
+    if not DRIVE_ID:
+        raise RuntimeError("No se pudo resolver el drive de SharePoint.")
+
+    drive = graph_get(f"{GRAPH}/drives/{DRIVE_ID}")
+    drive_web_url = (drive.get("webUrl") or "").rstrip("/")
+
+    parsed = urlparse(web_url)
+    doc_url_no_query = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+    relative_path = ""
+
+    if drive_web_url and doc_url_no_query.lower().startswith(drive_web_url.lower()):
+        relative_path = doc_url_no_query[len(drive_web_url):].lstrip("/")
+    else:
+        decoded_path = unquote(parsed.path or "")
+        markers = ("/Documentos compartidos/", "/Shared Documents/", "/Documentos/")
+        for marker in markers:
+            idx = decoded_path.lower().find(marker.lower())
+            if idx >= 0:
+                relative_path = decoded_path[idx + len(marker):].lstrip("/")
+                break
+
+    if not relative_path:
+        raise RuntimeError("No se pudo determinar la ruta del archivo en SharePoint.")
+
+    delete_url = f"{GRAPH}/drives/{DRIVE_ID}/root:/{quote(relative_path, safe='/')}:"
+    return graph_delete(delete_url, ignore_not_found=True)
 
 
 def ensure_folder(path: str) -> dict:
@@ -273,6 +318,8 @@ __all__ = [
     "graph_get",
     "graph_put",
     "graph_post",
+    "graph_delete",
+    "delete_file_by_web_url",
     "ensure_folder",
     "list_children",
     "find_sharepoint_doc_for_despacho",

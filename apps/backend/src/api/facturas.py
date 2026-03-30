@@ -27,7 +27,7 @@ from ..services.despachos import (
     sp_sync_resumen_ancho,
     sp_upsert_resumen_gasto,
 )
-from ..services.sharepoint import graph_put, get_access_token
+from ..services.sharepoint import delete_file_by_web_url, graph_put, get_access_token
 from ..services.tipos_gasto import resolve_tipogasto_id, resolve_tipogasto_name
 from ..utils.parsing import as_bool, normalize_despacho, safe_float, to_float_or_none
 
@@ -449,6 +449,13 @@ def eliminar_factura(factura_id: int):
         factura = Factura.query.get_or_404(factura_id)
         link_ids = get_linked_despacho_ids(factura_id)
         code = normalize_despacho(factura.Despacho or "")
+        doc_url = (factura.DocUrl or "").strip()
+
+        if doc_url:
+            try:
+                delete_file_by_web_url(doc_url)
+            except Exception as exc:
+                return jsonify({"error": f"No se pudo eliminar el adjunto en SharePoint: {exc}"}), 500
 
         if link_ids:
             FacturaDespacho.query.filter(FacturaDespacho.factura_id == factura_id).delete(synchronize_session=False)
