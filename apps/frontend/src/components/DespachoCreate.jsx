@@ -248,6 +248,35 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
           <OCSearchSelectMulti value={ocIds} onChange={setOcIds} />
         </div>
 
+
+        <section className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
+          <header>
+            <div className="text-xs uppercase tracking-wide text-slate-400">Montos</div>
+            <h3 className="text-lg font-semibold text-slate-100">Montos (opcional)</h3>
+          </header>
+
+          <div className="grid md:grid-cols-2 gap-4">
+            {[
+              ["FOB", "FOB"],
+              ["Estadistica", "Estadistica"],
+              ["Derechos_Importacion", "Derechos de Importacion"],
+              ["Tipo_Cambio", "Tipo de Cambio"],
+              ["Arancel", "Arancel SIM IMPO"],
+            ].map(([key, label]) => (
+              <div key={key}>
+                <label className="block text-sm mb-1 text-slate-300">{label}</label>
+                <input
+                  type="text"
+                  value={formData[key]}
+                  onChange={(e) => setField(key, e.target.value)}
+                  placeholder="Ej: 2.142.234,31"
+                  className={inputClasses}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+
         {/* PDF + OCR */}
         <div>
           <label className="block text-sm mb-1">PDF despacho (OCR)</label>

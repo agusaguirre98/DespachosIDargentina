@@ -27,13 +27,82 @@ EASYOCR_LANGS = ['es', 'en']
 def _strip_accents(s: str) -> str:
     return ''.join(ch for ch in unicodedata.normalize('NFD', s) if unicodedata.category(ch) != 'Mn')
 
-def norm_money(s: Optional[str]) -> Optional[float]:
+def norm_money(s: Optional[str], decimal_places: Optional[int] = None) -> Optional[float]:
     if not s:
         return None
-    s = s.replace('.', '').replace(',', '.')
+
+    text = re.sub(r"[^0-9,.-]", "", str(s)).strip()
+    if not text:
+        return None
+
+    last_comma = text.rfind(",")
+    last_dot = text.rfind(".")
+
     try:
-        return float(s)
-    except:
+        if last_comma != -1 and last_dot != -1:
+            decimal_sep = "," if last_comma > last_dot else "."
+            thousands_sep = "." if decimal_sep == "," else ","
+            normalized = text.replace(thousands_sep, "").replace(decimal_sep, ".")
+            return float(normalized)
+
+        if "," in text:
+            whole, frac = text.split(",", 1)
+            whole_digits = re.sub(r"\D", "", whole)
+            frac_digits = re.sub(r"\D", "", frac)
+            if decimal_places is not None and len(frac_digits) > decimal_places:
+                digits = whole_digits + frac_digits
+                normalized = f"{digits[:-decimal_places]}.{digits[-decimal_places:]}"
+                return float(normalized)
+            normalized = f"{whole_digits}.{frac_digits}" if frac_digits else whole_digits
+            return float(normalized)
+
+        if "." in text:
+            if text.count(".") == 1:
+                whole, frac = text.split(".", 1)
+                whole_digits = re.sub(r"\D", "", whole)
+                frac_digits = re.sub(r"\D", "", frac)
+                if decimal_places is not None and len(frac_digits) > decimal_places:
+                    digits = whole_digits + frac_digits
+                    normalized = f"{digits[:-decimal_places]}.{digits[-decimal_places:]}"
+                    return float(normalized)
+                normalized = f"{whole_digits}.{frac_digits}" if frac_digits else whole_digits
+                return float(normalized)
+
+            digits = re.sub(r"\D", "", text)
+            if decimal_places is not None and len(digits) > decimal_places:
+                normalized = f"{digits[:-decimal_places]}.{digits[-decimal_places:]}"
+                return float(normalized)
+            return float(digits)
+
+        digits = re.sub(r"\D", "", text)
+        if decimal_places is not None and len(digits) > decimal_places:
+            normalized = f"{digits[:-decimal_places]}.{digits[-decimal_places:]}"
+            return float(normalized)
+        return float(digits)
+    except Exception:
+        return None
+
+
+def norm_tipo_cambio(s: Optional[str]) -> Optional[float]:
+    if not s:
+        return None
+
+    text = re.sub(r"[^0-9,.-]", "", str(s)).strip()
+    if not text:
+        return None
+
+    if "," in text or "." in text:
+        return norm_money(text)
+
+    digits = re.sub(r"\D", "", text)
+    if not digits:
+        return None
+
+    try:
+        if len(digits) >= 5:
+            return float(f"{digits[:-1]}.{digits[-1:]}")
+        return float(digits)
+    except Exception:
         return None
 
 def norm_date(s: Optional[str]) -> Optional[str]:
@@ -205,11 +274,11 @@ def map_raw_to_db_fields(raw: Dict[str, Any], full_text: str = "") -> Dict[str, 
     return {
         "Despacho": pretty or None,
         "Fecha": norm_date(raw.get("Fecha")),
-        "FOB": norm_money(raw.get("FOB_Total")),
-        "Estadistica": norm_money(raw.get("Tasa_Estadistica")),
-        "Derechos_Importacion": norm_money(raw.get("Derechos_Importacion")),
-        "Tipo_Cambio": norm_money(raw.get("Cotiz")),
-        "Arancel": norm_money(raw.get("Arancel")),
+        "FOB": norm_money(raw.get("FOB_Total"), decimal_places=2),
+        "Estadistica": norm_money(raw.get("Tasa_Estadistica"), decimal_places=2),
+        "Derechos_Importacion": norm_money(raw.get("Derechos_Importacion"), decimal_places=2),
+        "Tipo_Cambio": norm_tipo_cambio(raw.get("Cotiz")),
+        "Arancel": norm_money(raw.get("Arancel"), decimal_places=2),
         "TipoDespacho": tipo,
     }
 
