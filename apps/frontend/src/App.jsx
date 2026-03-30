@@ -750,8 +750,16 @@ function App() {
                                                   <td className="p-2 text-right">{money(f.Importe)}</td>
                                                   <td className="p-2">
                                                     {f.HasDoc && f.DocUrl ? (
-                                                      <span className="text-indigo-300">Adjunto disponible</span>
-                                                    ) : <span className="text-slate-400">—</span>}
+                                                      <a
+                                                        href={f.DocUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        title={f.DocName || "Adjunto disponible"}
+                                                        className="text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
+                                                      >
+                                                        Adjunto disponible
+                                                      </a>
+                                                    ) : <span className="text-slate-400">-</span>}
                                                   </td>
                                                 </tr>
                                               ))}
