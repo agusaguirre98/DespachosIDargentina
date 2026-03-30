@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import logging
 import re
 from typing import Iterable, Optional, Tuple
@@ -120,11 +121,25 @@ def delete_file_by_web_url(web_url: str) -> bool:
     if not DRIVE_ID:
         raise RuntimeError("No se pudo resolver el drive de SharePoint.")
 
-    drive = graph_get(f"{GRAPH}/drives/{DRIVE_ID}")
-    drive_web_url = (drive.get("webUrl") or "").rstrip("/")
-
     parsed = urlparse(web_url)
     doc_url_no_query = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+
+    # Intento principal: resolver exactamente el driveItem a partir de la webUrl.
+    share_token = base64.urlsafe_b64encode(doc_url_no_query.encode("utf-8")).decode("ascii").rstrip("=")
+    share_url = f"{GRAPH}/shares/u!{share_token}/driveItem?$select=id,parentReference"
+    try:
+        item = graph_get(share_url)
+        item_id = item.get("id")
+        drive_id = (item.get("parentReference") or {}).get("driveId") or DRIVE_ID
+        if item_id and drive_id:
+            delete_url = f"{GRAPH}/drives/{drive_id}/items/{item_id}"
+            return graph_delete(delete_url, ignore_not_found=True)
+    except Exception:
+        logging.warning("delete_file_by_web_url: fallback a borrado por ruta para %s", doc_url_no_query)
+
+    # Fallback: reconstruir la ruta dentro de la biblioteca.
+    drive = graph_get(f"{GRAPH}/drives/{DRIVE_ID}")
+    drive_web_url = (drive.get("webUrl") or "").rstrip("/")
     relative_path = ""
 
     if drive_web_url and doc_url_no_query.lower().startswith(drive_web_url.lower()):
