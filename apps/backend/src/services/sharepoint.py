@@ -39,6 +39,12 @@ def configure(authority: str, client_id: str, client_secret: str, scope: Iterabl
 
 
 def get_access_token() -> str:
+    print("🔍 DEBUG MSAL CONFIG:")
+    print("CLIENT_ID:", CLIENT_ID)
+    print("CLIENT_SECRET:", CLIENT_SECRET[:5] + "..." if CLIENT_SECRET else None)
+    print("AUTHORITY:", AUTHORITY)
+    print("SCOPE:", SCOPE)
+
     if not (CLIENT_ID and CLIENT_SECRET and AUTHORITY):
         raise RuntimeError("SharePoint service not configured with client credentials.")
 
@@ -47,10 +53,19 @@ def get_access_token() -> str:
         authority=AUTHORITY,
         client_credential=CLIENT_SECRET,
     )
-    result = app.acquire_token_for_client(scopes=list(SCOPE) or ["https://graph.microsoft.com/.default"])
+
+    result = app.acquire_token_for_client(
+        scopes=list(SCOPE) or ["https://graph.microsoft.com/.default"]
+    )
+
+    print("🔐 TOKEN RESPONSE:", result)
+
     if "access_token" not in result:
         logging.error("Error en la autenticación Graph: %s", result.get("error_description"))
         raise RuntimeError(f"Error obteniendo token Graph: {result}")
+
+    print("✅ TOKEN OK")
+
     return result["access_token"]
 
 
@@ -215,6 +230,41 @@ def find_sharepoint_doc_for_despacho(numero: str) -> Optional[dict]:
     except Exception as exc:
         logging.warning("find_sharepoint_doc_for_despacho: %s", exc)
     return None
+
+def get_site_and_drive():
+    try:
+        print("🔍 Obteniendo SITE_ID y DRIVE_ID...")
+
+        token = get_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+
+        # 🔹 SITE
+        site_url = SP_SITE_URL.replace("https://", "")
+        url_site = f"https://graph.microsoft.com/v1.0/sites/{site_url}"
+
+        resp_site = requests.get(url_site, headers=headers)
+        resp_site.raise_for_status()
+
+        site_id = resp_site.json().get("id")
+        print("✅ SITE_ID:", site_id)
+
+        # 🔹 DRIVE
+        url_drive = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive"
+
+        resp_drive = requests.get(url_drive, headers=headers)
+        resp_drive.raise_for_status()
+
+        drive_id = resp_drive.json().get("id")
+        print("✅ DRIVE_ID:", drive_id)
+
+        return site_id, drive_id
+
+    except Exception as e:
+        print("❌ ERROR obteniendo SITE/DRIVE:", str(e))
+        return None, None
 
 
 __all__ = [

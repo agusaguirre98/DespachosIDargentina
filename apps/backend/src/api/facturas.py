@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import os
+import requests
 from typing import List
 
 from flask import Blueprint, current_app, jsonify, request
@@ -25,7 +27,7 @@ from ..services.despachos import (
     sp_sync_resumen_ancho,
     sp_upsert_resumen_gasto,
 )
-from ..services.sharepoint import graph_put
+from ..services.sharepoint import graph_put, get_access_token
 from ..services.tipos_gasto import resolve_tipogasto_id, resolve_tipogasto_name
 from ..utils.parsing import as_bool, normalize_despacho, safe_float, to_float_or_none
 
@@ -33,7 +35,57 @@ facturas_bp = Blueprint("facturas", __name__, url_prefix="/api")
 
 
 def _site_ids() -> tuple[str | None, str | None]:
-    return current_app.config.get("SITE_ID"), current_app.config.get("DRIVE_ID")
+    try:
+        print("🔍 DEBUG FACTURAS: entrando a _site_ids")
+
+        token = get_access_token()
+        print("✅ TOKEN obtenido")
+
+        headers = {"Authorization": f"Bearer {token}"}
+
+        SP_SITE_URL = os.getenv("SP_SITE_URL")
+
+        if not SP_SITE_URL:
+            raise Exception("SP_SITE_URL no configurado")
+
+        print("🌐 SP_SITE_URL:", SP_SITE_URL)
+
+        # 🔥 parse correcto (igual que despachos)
+        clean = SP_SITE_URL.replace("https://", "")
+        parts = clean.split("/")
+        hostname = parts[0]
+        site_path = "/".join(parts[1:])
+
+        url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/{site_path}"
+
+        print("🌐 URL SITE:", url)
+
+        resp = requests.get(url, headers=headers)
+        print("📡 RESPONSE SITE:", resp.status_code, resp.text)
+
+        resp.raise_for_status()
+
+        site_id = resp.json().get("id")
+        print("📁 SITE_ID:", site_id)
+
+        # 🔥 DRIVE
+        resp = requests.get(
+            f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive",
+            headers=headers
+        )
+
+        print("📡 RESPONSE DRIVE:", resp.status_code, resp.text)
+
+        resp.raise_for_status()
+
+        drive_id = resp.json().get("id")
+        print("📁 DRIVE_ID:", drive_id)
+
+        return site_id, drive_id
+
+    except Exception as e:
+        print("❌ ERROR en _site_ids (facturas):", str(e))
+        return None, None
 
 
 def _use_resumen_ancho() -> bool:
@@ -45,9 +97,9 @@ def facturas_with_links():
     try:
         only_unlinked = as_bool(request.args.get("only_unlinked", "0"))
         try:
-            limit = max(1, min(5000, int(request.args.get("limit", 500))))
+            limit = max(1, min(5000, int(request.args.get("limit", 2000))))
         except Exception:
-            limit = 500
+            limit = 2000
         try:
             offset = max(0, int(request.args.get("offset", 0)))
         except Exception:
@@ -265,17 +317,36 @@ def crear_factura():
         tg_name = resolve_tipogasto_name(datos.get("TipoGasto")) or "Generales"
 
         uploaded = None
+
         if archivo:
-            site_id, drive_id = _site_ids()
-            if not site_id or not drive_id:
-                return (
-                    jsonify(
-                        {
-                            "error": "No se pudo conectar a SharePoint. Verifique las credenciales y permisos en el servidor."
-                        }
-                    ),
-                    500,
-                )
+            try:
+                print("📂 DEBUG FACTURA:")
+                print("Archivo recibido:", archivo.filename)
+
+                site_id, drive_id = _site_ids()
+                print("SITE_ID:", site_id)
+                print("DRIVE_ID:", drive_id)
+
+                if site_id and drive_id:
+                    file_bytes = archivo.read()
+
+                    folder = f"Gastos/{tg_name}"
+                    sp_path = f"/{folder}/{archivo.filename}"
+
+                    url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:{sp_path}:/content"
+
+                    print("📤 Subiendo a SharePoint:", url)
+
+                    uploaded = graph_put(url, file_bytes)
+
+                    print("✅ Upload OK:", uploaded)
+
+                else:
+                    print("⚠ SharePoint no configurado")
+
+            except Exception as e:
+                print("❌ ERROR SHAREPOINT:", str(e))
+                uploaded = None
             file_bytes = archivo.read()
             folder = f"Gastos/{tg_name}"
             sp_path = f"/{folder}/{archivo.filename}"

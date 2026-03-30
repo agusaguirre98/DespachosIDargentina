@@ -5,6 +5,8 @@ from __future__ import annotations
 import datetime
 import json
 import logging
+import requests
+import os
 from typing import Iterable
 
 from flask import Blueprint, current_app, jsonify, request
@@ -26,7 +28,7 @@ from ..services.despachos import (
     sp_sync_resumen_ancho_todos,
     sp_upsert_resumen_gasto,
 )
-from ..services.sharepoint import ensure_folder, graph_put, upload_small
+from ..services.sharepoint import ensure_folder, graph_put, upload_small, get_access_token
 from ..services.tipos_gasto import resolve_tipogasto_id, resolve_tipogasto_name
 from ..services.zf import import_zfi_lines_from_oc as import_zfi_lines_from_oc_service, oc_existe_en_asignador
 from ..utils.parsing import as_bool, normalize_despacho, parse_float, safe_float, to_float_or_none
@@ -75,8 +77,59 @@ def ocr_despacho():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-def _site_ids() -> tuple[str | None, str | None]:
-    return current_app.config.get("SITE_ID"), current_app.config.get("DRIVE_ID")
+SP_SITE_URL = os.getenv("SP_SITE_URL")
+def _site_ids():
+    try:
+        print("🔍 DEBUG: entrando a _site_ids")
+
+        token = get_access_token()
+        print("✅ TOKEN obtenido")
+
+        headers = {"Authorization": f"Bearer {token}"}
+
+        SP_SITE_URL = os.getenv("SP_SITE_URL")
+
+        if not SP_SITE_URL:
+            raise Exception("SP_SITE_URL no configurado")
+
+        print("🌐 SP_SITE_URL:", SP_SITE_URL)
+
+        # 🔥 construir hostname y path correctamente
+        clean = SP_SITE_URL.replace("https://", "")
+        parts = clean.split("/")
+        hostname = parts[0]
+        site_path = "/".join(parts[1:])
+
+        url = f"https://graph.microsoft.com/v1.0/sites/{hostname}:/{site_path}"
+
+        print("🌐 URL SITE:", url)
+
+        resp = requests.get(url, headers=headers)
+        print("📡 RESPONSE SITE:", resp.status_code, resp.text)
+
+        site_id = resp.json().get("id")
+        print("📁 SITE_ID:", site_id)
+
+        # 🔥 DRIVE
+        resp = requests.get(
+            f"https://graph.microsoft.com/v1.0/sites/{site_id}/drive",
+            headers=headers
+        )
+
+        print("📡 RESPONSE DRIVE:", resp.status_code, resp.text)
+
+        drive_id = resp.json().get("id")
+        print("📁 DRIVE_ID:", drive_id)
+
+        return site_id, drive_id
+
+    except Exception as e:
+        print("❌ ERROR en _site_ids:", str(e))
+        return None, None
+
+    except Exception as e:
+        print("❌ ERROR en _site_ids:", str(e))
+        return None, None
 
 
 def _tipos_validos() -> Iterable[str]:
