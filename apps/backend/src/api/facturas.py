@@ -376,11 +376,6 @@ def crear_factura():
             except Exception as e:
                 print("❌ ERROR SHAREPOINT:", str(e))
                 uploaded = None
-            file_bytes = archivo.read()
-            folder = f"Gastos/{tg_name}"
-            sp_path = f"/{folder}/{archivo.filename}"
-            url = f"https://graph.microsoft.com/v1.0/sites/{site_id}/drives/{drive_id}/root:{sp_path}:/content"
-            uploaded = graph_put(url, file_bytes)
 
         nueva = Factura(
             Fecha=datetime.datetime.strptime(datos.get("Fecha"), "%Y-%m-%d").date() if datos.get("Fecha") else None,
