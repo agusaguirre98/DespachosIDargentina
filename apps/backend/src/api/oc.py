@@ -33,23 +33,18 @@ def oc_select():
 
     sql = text("""
         SELECT TOP 25
-            A.ORDEN_COMPRA_ID                      AS OC_ID,
-            A.REFERENCIA                 AS INNVOICE,
-            H.CODIGO                     AS CODPROVEEDOR,
-            H.RAZON_SOCIAL               AS RAZON_SOCIAL,
-            CONVERT(date, A.FECHA_ALTA)  AS FECHAOC
+            A.ORDEN_COMPRA_ID             AS OC_ID,
+            A.REFERENCIA                  AS REFERENCIA,
+            H.CODIGO                      AS CODPROVEEDOR,
+            H.RAZON_SOCIAL                AS RAZON_SOCIAL,
+            CONVERT(date, A.FECHA_ALTA)   AS FECHAOC
         FROM dbo.ERP_ORDENES_COMPRA AS A
         LEFT JOIN dbo.ERP_PROVEEDORES AS H
           ON H.PROVEEDOR_ID = A.PROVEEDOR_ID
         WHERE A.ESTADO <> 'ANULADA'
           AND A.FECHA_ALTA >= :since
-          AND (
-                CAST(A.ORDEN_COMPRA_ID AS NVARCHAR(50)) LIKE :pattern
-                OR CAST(A.REFERENCIA AS NVARCHAR(50)) LIKE :pattern
-                OR COALESCE(H.CODIGO,'') LIKE :pattern
-                OR COALESCE(H.RAZON_SOCIAL,'') LIKE :pattern
-              )
-        ORDER BY A.ORDEN_COMPRA_ID DESC
+          AND CAST(A.REFERENCIA AS NVARCHAR(100)) LIKE :pattern
+        ORDER BY A.FECHA_ALTA DESC, A.ORDEN_COMPRA_ID DESC
     """)
 
     try:

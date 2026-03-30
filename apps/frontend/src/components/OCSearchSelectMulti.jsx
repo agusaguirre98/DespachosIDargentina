@@ -4,12 +4,12 @@ import useApi from "../hooks/useApi";
 export default function OCSearchSelectMulti({
   value = [],
   onChange,
-  placeholder = "Buscar OC...",
+  placeholder = "Buscar referencia...",
 }) {
   const { get } = useApi();
   const containerRef = useRef(null);
 
-  // 🔒 Normalización segura del value
+  // Normalizacion segura del value
   const selected = useMemo(() => {
     if (!Array.isArray(value)) return [];
 
@@ -28,7 +28,7 @@ export default function OCSearchSelectMulti({
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
 
-  // 🔎 Buscar OCs
+  // Buscar OCs
   useEffect(() => {
     let cancelled = false;
 
@@ -69,7 +69,7 @@ export default function OCSearchSelectMulti({
     };
   }, [query, get]);
 
-  // 🔒 Cerrar dropdown al hacer click afuera
+  // Cerrar dropdown al hacer click afuera
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (!containerRef.current) return;
@@ -130,7 +130,7 @@ export default function OCSearchSelectMulti({
             title="Quitar OC"
           >
             <span>{oc.OC_ID}</span>
-            <span className="text-slate-400">×</span>
+            <span className="text-slate-400">x</span>
           </button>
         ))}
       </div>
@@ -170,11 +170,11 @@ export default function OCSearchSelectMulti({
                     onClick={() => handleSelect(oc)}
                   >
                     <span className="font-medium text-slate-100">
-                      {oc.OC_ID}
+                      {oc.REFERENCIA || oc.OC_ID}
                     </span>
 
                     <span className="text-xs text-slate-400">
-                      {oc.CODPROVEEDOR || "-"} · {oc.RAZON_SOCIAL || "-"}
+                      OC {oc.OC_ID || "-"} - {oc.CODPROVEEDOR || "-"} - {oc.RAZON_SOCIAL || "-"}
                     </span>
 
                     {oc.FechaOC && (
@@ -191,7 +191,7 @@ export default function OCSearchSelectMulti({
               results.length === 0 &&
               query.trim().length >= 2 && (
                 <div className="px-3 py-2 text-xs text-slate-400">
-                  No se encontraron OCs para “{query}”.
+                  No se encontraron OCs para "{query}".
                 </div>
               )}
           </div>
