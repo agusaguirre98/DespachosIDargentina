@@ -22,6 +22,7 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
   const { get, upload, ocrDespacho } = useApi(); // 👈 agregado OCR
 
   const [loadingOCR, setLoadingOCR] = useState(false);
+  const [creatingDespacho, setCreatingDespacho] = useState(false);
 
   const inputClasses =
     "w-full px-3 py-2 rounded-lg bg-slate-950 border border-white/20 text-slate-100 placeholder:text-slate-500 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/60 outline-none";
@@ -133,6 +134,8 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
       return setMensaje("Seleccioná al menos una OC.");
 
     try {
+      setCreatingDespacho(true);
+
       const payload = {
         ...formData,
         Despacho: normalizeDespacho(formData.Despacho),
@@ -178,6 +181,8 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
       if (onCreado) onCreado(resp.id);
     } catch (err) {
       setMensaje("❌ " + err.message);
+    } finally {
+      setCreatingDespacho(false);
     }
   };
 
@@ -278,19 +283,27 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
         <div className="flex gap-3 pt-3">
           <button
             type="submit"
-            className="px-4 py-2 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition-colors"
+            disabled={creatingDespacho}
+            className="px-4 py-2 bg-indigo-600 rounded-lg hover:bg-indigo-500 transition-colors disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Crear despacho
+            {creatingDespacho ? "Creando despacho..." : "Crear despacho"}
           </button>
 
           <button
             type="button"
             onClick={volverAtras}
-            className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500 transition-colors"
+            disabled={creatingDespacho}
+            className="px-4 py-2 bg-gray-600 rounded-lg hover:bg-gray-500 transition-colors disabled:cursor-not-allowed disabled:opacity-70"
           >
             Cancelar
           </button>
         </div>
+
+        {creatingDespacho && (
+          <div className="text-sm text-indigo-200">
+            Creando despacho...
+          </div>
+        )}
 
         {mensaje && (
           <div className="text-sm pt-3 text-emerald-300">
