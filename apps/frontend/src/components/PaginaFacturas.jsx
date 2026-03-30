@@ -21,10 +21,19 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
 
   const [searchText, setSearchText] = useState("");
 
-  const selectClasses =
-    "px-3 py-1.5 rounded-lg bg-slate-900 border border-white/20 text-slate-100 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/60";
-
   const optionClasses = "bg-slate-900 text-slate-100";
+
+  const sortableColumns = {
+    Fecha: { asc: "fecha_asc", desc: "fecha_desc" },
+    Proveedor: { asc: "proveedor_asc", desc: "proveedor_desc" },
+    Factura: { asc: "factura_asc", desc: "factura_desc" },
+    TipoGasto: { asc: "tipo_gasto_asc", desc: "tipo_gasto_desc" },
+    Moneda: { asc: "moneda_asc", desc: "moneda_desc" },
+    Importe: { asc: "importe_asc", desc: "importe_desc" },
+    Adjunto: { asc: "adjunto_asc", desc: "adjunto_desc" },
+    Despacho: { asc: "despacho_asc", desc: "despacho_desc" },
+    Vinculos: { asc: "vinculos_asc", desc: "vinculos_desc" },
+  };
 
   const inputClasses =
     "w-full px-4 py-2 rounded-lg bg-slate-900 border border-white/20 text-slate-100 placeholder:text-slate-500 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/60";
@@ -81,6 +90,37 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
     setPage(1);
   };
 
+  const getSortDirection = (column) => {
+    const config = sortableColumns[column];
+    if (!config) return null;
+    if (order === config.asc) return "asc";
+    if (order === config.desc) return "desc";
+    return null;
+  };
+
+  const toggleSort = (column) => {
+    const config = sortableColumns[column];
+    if (!config) return;
+    const currentDirection = getSortDirection(column);
+    const nextOrder = currentDirection === "asc" ? config.desc : config.asc;
+    setPage(1);
+    setOrder(nextOrder);
+  };
+
+  const renderSortIndicator = (column) => {
+    const direction = getSortDirection(column);
+    if (direction === "asc") return <span aria-hidden="true">^</span>;
+    if (direction === "desc") return <span aria-hidden="true">v</span>;
+    return <span aria-hidden="true" className="text-slate-500">-</span>;
+  };
+
+  const getAriaSort = (column) => {
+    const direction = getSortDirection(column);
+    if (direction === "asc") return "ascending";
+    if (direction === "desc") return "descending";
+    return "none";
+  };
+
   if (modo === "create") {
     return (
       <div className="max-w-7xl mx-auto">
@@ -117,22 +157,6 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
             />
             Mostrar solo sin despacho
           </label>
-
-          <select
-            className={selectClasses}
-            value={order}
-            onChange={(e) => {
-              setPage(1);
-              setOrder(e.target.value);
-            }}
-          >
-            <option value="fecha_desc" className={optionClasses}>Fecha ↓</option>
-            <option value="fecha_asc" className={optionClasses}>Fecha ↑</option>
-            <option value="id_desc" className={optionClasses}>ID ↓</option>
-            <option value="id_asc" className={optionClasses}>ID ↑</option>
-            <option value="importe_desc" className={optionClasses}>Importe ↓</option>
-            <option value="importe_asc" className={optionClasses}>Importe ↑</option>
-          </select>
 
           <button
             onClick={fetchFacturas}
@@ -218,15 +242,60 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
           <table className="min-w-full text-sm">
             <thead className="bg-white/5">
               <tr>
-                <th className="text-left p-3">Fecha</th>
-                <th className="text-left p-3">Proveedor</th>
-                <th className="text-left p-3">N° Factura</th>
-                <th className="text-left p-3">Tipo Gasto</th>
-                <th className="text-right p-3">Moneda</th>
-                <th className="text-right p-3">Importe</th>
-                <th className="text-left p-3">Adjunto</th>
-                <th className="text-left p-3">Despacho</th>
-                <th className="text-left p-3">Vínculos</th>
+                <th className="text-left p-3" aria-sort={getAriaSort("Fecha")}>
+                  <button type="button" onClick={() => toggleSort("Fecha")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por fecha">
+                    Fecha
+                    {renderSortIndicator("Fecha")}
+                  </button>
+                </th>
+                <th className="text-left p-3" aria-sort={getAriaSort("Proveedor")}>
+                  <button type="button" onClick={() => toggleSort("Proveedor")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por proveedor">
+                    Proveedor
+                    {renderSortIndicator("Proveedor")}
+                  </button>
+                </th>
+                <th className="text-left p-3" aria-sort={getAriaSort("Factura")}>
+                  <button type="button" onClick={() => toggleSort("Factura")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por numero de factura">
+                    Nro Factura
+                    {renderSortIndicator("Factura")}
+                  </button>
+                </th>
+                <th className="text-left p-3" aria-sort={getAriaSort("TipoGasto")}>
+                  <button type="button" onClick={() => toggleSort("TipoGasto")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por tipo de gasto">
+                    Tipo Gasto
+                    {renderSortIndicator("TipoGasto")}
+                  </button>
+                </th>
+                <th className="text-right p-3" aria-sort={getAriaSort("Moneda")}>
+                  <button type="button" onClick={() => toggleSort("Moneda")} className="ml-auto flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por moneda">
+                    Moneda
+                    {renderSortIndicator("Moneda")}
+                  </button>
+                </th>
+                <th className="text-right p-3" aria-sort={getAriaSort("Importe")}>
+                  <button type="button" onClick={() => toggleSort("Importe")} className="ml-auto flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por importe">
+                    Importe
+                    {renderSortIndicator("Importe")}
+                  </button>
+                </th>
+                <th className="text-left p-3" aria-sort={getAriaSort("Adjunto")}>
+                  <button type="button" onClick={() => toggleSort("Adjunto")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por adjunto">
+                    Adjunto
+                    {renderSortIndicator("Adjunto")}
+                  </button>
+                </th>
+                <th className="text-left p-3" aria-sort={getAriaSort("Despacho")}>
+                  <button type="button" onClick={() => toggleSort("Despacho")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por despacho">
+                    Despacho
+                    {renderSortIndicator("Despacho")}
+                  </button>
+                </th>
+                <th className="text-left p-3" aria-sort={getAriaSort("Vinculos")}>
+                  <button type="button" onClick={() => toggleSort("Vinculos")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por vinculos">
+                    Vinculos
+                    {renderSortIndicator("Vinculos")}
+                  </button>
+                </th>
                 <th className="text-left p-3">Acciones</th>
               </tr>
             </thead>

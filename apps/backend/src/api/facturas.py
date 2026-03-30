@@ -109,11 +109,25 @@ def facturas_with_links():
         order_key = (request.args.get("order") or "fecha_desc").lower()
         order_sql_map = {
             "fecha_desc": "f.Fecha DESC, f.ID DESC",
-            "fecha_asc": "f.Fecha ASC,  f.ID ASC",
+            "fecha_asc": "f.Fecha ASC, f.ID ASC",
+            "proveedor_desc": "COALESCE(f.Proveedor, '') DESC, f.ID DESC",
+            "proveedor_asc": "COALESCE(f.Proveedor, '') ASC, f.ID ASC",
+            "factura_desc": "COALESCE(NULLIF(f.nroFactura, ''), f.Invoice, '') DESC, f.ID DESC",
+            "factura_asc": "COALESCE(NULLIF(f.nroFactura, ''), f.Invoice, '') ASC, f.ID ASC",
+            "tipo_gasto_desc": "COALESCE(tg.TipoGasto, '') DESC, f.ID DESC",
+            "tipo_gasto_asc": "COALESCE(tg.TipoGasto, '') ASC, f.ID ASC",
+            "moneda_desc": "COALESCE(f.Moneda, '') DESC, f.ID DESC",
+            "moneda_asc": "COALESCE(f.Moneda, '') ASC, f.ID ASC",
+            "importe_desc": "f.Importe DESC, f.ID DESC",
+            "importe_asc": "f.Importe ASC, f.ID ASC",
+            "adjunto_desc": "CASE WHEN f.HasDoc = 1 THEN 1 ELSE 0 END DESC, COALESCE(f.DocName, '') ASC, f.ID DESC",
+            "adjunto_asc": "CASE WHEN f.HasDoc = 1 THEN 1 ELSE 0 END ASC, COALESCE(f.DocName, '') ASC, f.ID ASC",
+            "despacho_desc": "COALESCE(f.Despacho, '') DESC, f.ID DESC",
+            "despacho_asc": "COALESCE(f.Despacho, '') ASC, f.ID ASC",
+            "vinculos_desc": "COUNT(fd.despacho_id) DESC, f.ID DESC",
+            "vinculos_asc": "COUNT(fd.despacho_id) ASC, f.ID ASC",
             "id_desc": "f.ID DESC",
             "id_asc": "f.ID ASC",
-            "importe_desc": "f.Importe DESC, f.ID DESC",
-            "importe_asc": "f.Importe ASC,  f.ID ASC",
         }
         order_clause = order_sql_map.get(order_key, "f.Fecha DESC, f.ID DESC")
         having_clause = "HAVING COUNT(fd.despacho_id) = 0" if only_unlinked else ""
