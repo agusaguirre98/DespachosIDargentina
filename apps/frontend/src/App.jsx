@@ -35,7 +35,9 @@ function App() {
 
   // 🔑 key para forzar remount de PaginaFacturas
   const [facturasKey, setFacturasKey] = useState(0);
-  const goFacturas = () => {
+  const [facturaDespachoInicial, setFacturaDespachoInicial] = useState(null);
+  const goFacturas = (despachoInicial = null) => {
+    setFacturaDespachoInicial(despachoInicial);
     setVistaActual('facturas');
     setFacturasKey((k) => k + 1);
   };
@@ -178,6 +180,17 @@ function App() {
     });
   };
 
+  const getOcIds = (d) => {
+    if (Array.isArray(d?.oc_ids) && d.oc_ids.length) {
+      return d.oc_ids
+        .map((ocId) => (ocId ?? '').toString().trim())
+        .filter(Boolean);
+    }
+    return d?.OC_ID ? [d.OC_ID.toString().trim()].filter(Boolean) : [];
+  };
+
+  const getOcDisplay = (d) => getOcIds(d).join(', ');
+
   const getSortValue = (d, field) => {
     switch (field) {
       case 'ID': {
@@ -185,7 +198,7 @@ function App() {
         return Number.isFinite(parsed) ? parsed : null;
       }
       case 'OC':
-        return (d.OC_ID ?? '').toString().toUpperCase();
+        return getOcDisplay(d).toUpperCase();
       case 'Despacho':
         return norm(d.Despacho);
       case 'Tipo':
@@ -234,6 +247,7 @@ function App() {
       const idStr = String(d.ID || '');
       const nro = norm(d.Despacho);
       const fecha = (d.Fecha || '');
+      const ocText = getOcDisplay(d).toUpperCase();
 
       if (searchField === 'FECHA') {
         if (!hasRange) return true;
@@ -251,7 +265,7 @@ function App() {
       }
 
       if (!q && !hasRange) return true;
-      const byText = q ? (nro.includes(q) || idStr.includes(searchText.trim()) || fecha.includes(searchText.trim())) : true;
+      const byText = q ? (nro.includes(q) || idStr.includes(searchText.trim()) || fecha.includes(searchText.trim()) || ocText.includes(q)) : true;
       const byDate = hasRange ? inRange(fecha) : true;
       return byText && byDate;
     });
@@ -359,7 +373,7 @@ function App() {
         return <FormularioEditarDespacho id={despachoIdAEditar} volverAtras={() => setVistaActual('tabla_despachos')} />;
 
       case 'facturas':
-        return <PaginaFacturas key={facturasKey} />;
+        return <PaginaFacturas key={facturasKey} despachoInicial={facturaDespachoInicial} />;
       case 'repositorio':
         return <PaginaRepositorio />;
       case 'zf':
@@ -630,7 +644,7 @@ function App() {
                                 </button>
                               </td>
                               <td className="py-2 px-3">{d.ID}</td>
-                              <td className="py-2 px-3">{d.OC_ID || <span className="text-slate-400 text-xs">-</span>}</td>
+                              <td className="py-2 px-3">{getOcDisplay(d) || <span className="text-slate-400 text-xs">-</span>}</td>
                               <td className="py-2 px-3 font-medium">{d.Despacho}</td>
                               {/* Tipo */}
                               <td className="py-2 px-3">
@@ -645,14 +659,17 @@ function App() {
                               <td className="py-2 px-3 text-right">{money(d.FOB)}</td>
                               <td className="py-2 px-3">
                                 {d.HasDoc && d.DocUrl ? (
-                                  <span
+                                  <a
+                                    href={d.DocUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
                                     title={d.DocName || "Adjunto disponible"}
-                                    className="inline-flex items-center gap-1 text-indigo-300"
+                                    className="inline-flex items-center gap-1 text-indigo-300 hover:text-indigo-200 underline underline-offset-2"
                                   >
                                     <span className="text-xs">Adjunto disponible</span>
-                                  </span>
+                                  </a>
                                 ) : (
-                                  <span className="text-slate-400 text-xs">—</span>
+                                  <span className="text-slate-400 text-xs">-</span>
                                 )}
                               </td>
 
@@ -699,7 +716,7 @@ function App() {
                                           </button>
                                           <button
                                             className="px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs"
-                                            onClick={goFacturas}
+                                            onClick={() => goFacturas({ ID: d.ID, Despacho: d.Despacho })}
                                           >
                                             Nueva factura
                                           </button>
@@ -822,7 +839,7 @@ function App() {
             </button>
             <button
               className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-400"
-              onClick={goFacturas}
+              onClick={() => goFacturas()}
             >
               Ver Facturas
             </button>

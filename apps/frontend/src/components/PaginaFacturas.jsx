@@ -5,12 +5,12 @@ import ErrorBoundary from "./ErrorBoundary";
 
 const DEFAULT_LIMIT = 100;
 
-const PaginaFacturas = () => {
+const PaginaFacturas = ({ despachoInicial = null }) => {
   const [items, setItems] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState("");
 
-  const [modo, setModo] = useState("list");
+  const [modo, setModo] = useState(despachoInicial ? "create" : "list");
   const [facturaEdit, setFacturaEdit] = useState(null);
 
   const [soloSinDespacho, setSoloSinDespacho] = useState(false);
@@ -88,7 +88,7 @@ const PaginaFacturas = () => {
     return (
       <div className="max-w-7xl mx-auto">
         <ErrorBoundary>
-         <FormularioFactura volverAtras={volverListado} />
+         <FormularioFactura volverAtras={volverListado} despachoInicial={despachoInicial} />
         </ErrorBoundary>
       </div>
     );

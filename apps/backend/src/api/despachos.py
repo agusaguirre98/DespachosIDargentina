@@ -383,7 +383,15 @@ def obtener_tipos_gasto():
 def obtener_despachos():
     try:
         despachos = DespachoResumen.query.all()
-        return jsonify([serializar_despacho(d) for d in despachos])
+        items = []
+        for despacho in despachos:
+            data = serializar_despacho(despacho)
+            oc_links = _get_oc_ids_for_despacho(despacho.ID)
+            if not oc_links and despacho.OC_ID:
+                oc_links = [despacho.OC_ID]
+            data["oc_ids"] = oc_links
+            items.append(data)
+        return jsonify(items)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 

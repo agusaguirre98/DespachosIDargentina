@@ -38,7 +38,7 @@ const debounce = (fn, ms = 300) => {
   };
 };
 
-const FormularioFactura = ({ volverAtras }) => {
+const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
   const [formData, setFormData] = useState({
     TipoGasto: "",
     Fecha: "",
@@ -190,6 +190,29 @@ const FormularioFactura = ({ volverAtras }) => {
     for (const d of serverSuggestions) m.set(String(d.ID), d);
     return m;
   }, [despachosList, serverSuggestions]);
+
+  useEffect(() => {
+    if (!despachoInicial || !despachosList.length) return;
+
+    const despachoInicialId = despachoInicial?.ID != null ? String(despachoInicial.ID) : "";
+    const despachoInicialCodigo = normalize(despachoInicial?.Despacho || "");
+
+    const match = despachosList.find((d) => {
+      if (despachoInicialId && String(d.ID) === despachoInicialId) return true;
+      return normalize(d?.Despacho || "") === despachoInicialCodigo;
+    });
+
+    const despachoTarget = match || despachoInicial;
+    const despachoCodigo = despachoTarget?.Despacho || "";
+    if (!despachoCodigo) return;
+
+    setFormData((prev) => (prev.Despacho === despachoCodigo ? prev : { ...prev, Despacho: despachoCodigo }));
+
+    if (match?.ID != null) {
+      const matchId = String(match.ID);
+      setSelectedDespachos((prev) => (prev.includes(matchId) ? prev : [matchId, ...prev]));
+    }
+  }, [despachoInicial, despachosList]);
 
   // Valores seleccionados como objetos (para el Combobox multiple)
   const selectedAsObjects = selectedDespachos
