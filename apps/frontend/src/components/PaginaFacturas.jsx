@@ -3,7 +3,7 @@ import FormularioFactura from "../components/FormularioFactura";
 import FormularioEditarFactura from "../components/FormularioEditarFactura";
 import ErrorBoundary from "./ErrorBoundary";
 
-const DEFAULT_LIMIT = 100;
+const DEFAULT_LIMIT = 50;
 
 const PaginaFacturas = ({ despachoInicial = null }) => {
   const [items, setItems] = useState([]);
@@ -17,6 +17,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
   const [order, setOrder] = useState("fecha_desc");
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
 
   const [searchText, setSearchText] = useState("");
 
@@ -44,9 +45,11 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
       if (!r.ok || !j?.ok) throw new Error(j?.error || "Error obteniendo facturas");
 
       setItems(Array.isArray(j.items) ? j.items : []);
+      setTotalItems(Number(j?.total) || 0);
     } catch (e) {
       setError(e.message || "Error inesperado");
       setItems([]);
+      setTotalItems(0);
     } finally {
       setCargando(false);
     }
@@ -83,6 +86,20 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
       String(f.Importe || "").toLowerCase().includes(q)
     );
   }, [baseRows, searchText]);
+
+
+  const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+  const pageToDisplay = Math.min(page, totalPages);
+  const showingStart = totalItems === 0 ? 0 : (pageToDisplay - 1) * limit + 1;
+  const showingEnd = totalItems === 0 ? 0 : Math.min(pageToDisplay * limit, totalItems);
+  const disablePrevPage = pageToDisplay <= 1;
+  const disableNextPage = pageToDisplay >= totalPages || totalItems === 0;
+
+  const handleRowsPerPageChange = (event) => {
+    const value = Number(event.target.value) || DEFAULT_LIMIT;
+    setLimit(value);
+    setPage(1);
+  };
 
   if (modo === "create") {
     return (
@@ -170,6 +187,49 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
       </div>
 
       {error && <div className="mb-3 p-3 rounded-lg bg-red-900/30">{error}</div>}
+
+      {!cargando && !error && (
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3 text-sm text-slate-200">
+          <div>
+            Mostrando {showingStart.toLocaleString("es-AR")}-{showingEnd.toLocaleString("es-AR")} de {totalItems.toLocaleString("es-AR")} facturas
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs uppercase tracking-wide text-slate-400">Filas por pagina</label>
+            <select
+              className="px-3 py-1.5 rounded-lg bg-white/10 border border-white/20 outline-none text-slate-100 focus:bg-white focus:text-slate-900"
+              value={limit}
+              onChange={handleRowsPerPageChange}
+            >
+              {[25, 50, 100, 200, 500].map((size) => (
+                <option key={size} value={size} className={optionClasses}>{size}</option>
+              ))}
+            </select>
+            <div className="inline-flex items-center gap-1">
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={disablePrevPage}
+                title="Pagina anterior"
+              >
+                {"<"}
+              </button>
+              <span className="px-2 font-semibold">
+                {pageToDisplay.toLocaleString("es-AR")} / {Math.max(totalPages, 1).toLocaleString("es-AR")}
+              </span>
+              <button
+                type="button"
+                className="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-50"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={disableNextPage}
+                title="Pagina siguiente"
+              >
+                {">"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {cargando ? (
         <p className="text-slate-300">Cargando…</p>

@@ -136,7 +136,18 @@ def facturas_with_links():
         ORDER BY {order_clause}
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY;
         """
+        count_sql = f"""
+        SELECT COUNT(*) AS Total
+        FROM (
+            SELECT f.ID
+            FROM dbo.APP_Despachos_Detalles f
+            LEFT JOIN dbo.Factura_Despacho fd ON fd.factura_id = f.ID
+            GROUP BY f.ID
+            {having_clause}
+        ) q;
+        """
         rows = db.session.execute(text(sql), {"offset": offset, "limit": limit}).mappings().all()
+        total = db.session.execute(text(count_sql)).scalar() or 0
         items = []
         for row in rows:
             data = dict(row)
@@ -144,7 +155,7 @@ def facturas_with_links():
             if isinstance(fecha, (datetime.date, datetime.datetime)):
                 data["Fecha"] = fecha.isoformat()
             items.append(data)
-        return jsonify({"ok": True, "items": items})
+        return jsonify({"ok": True, "items": items, "total": int(total), "limit": limit, "offset": offset})
     except Exception as exc:
         logging.exception("facturas_with_links error: %s", exc)
         return jsonify({"ok": False, "error": str(exc)}), 500
