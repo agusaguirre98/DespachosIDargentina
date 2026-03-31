@@ -57,7 +57,7 @@ function App() {
   const [sortConfig, setSortConfig] = useState({ field: 'ID', direction: 'asc' });
 
   // --- Búsqueda/filtrado existentes ---
-  const [searchField, setSearchField] = useState('TODOS'); // 'TODOS' | 'DESPACHO' | 'FECHA' | 'ID'
+  const [searchField, setSearchField] = useState('TODOS'); // 'TODOS' | 'DESPACHO' | 'REFERENCIA' | 'FECHA' | 'ID'
   const [searchText, setSearchText] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -272,6 +272,11 @@ function App() {
         return nro.includes(q);
       }
 
+      if (searchField === 'REFERENCIA') {
+        if (!q) return true;
+        return referenciaText.includes(q);
+      }
+
       if (searchField === 'ID') {
         if (!q) return true;
         return idStr.includes(searchText.trim());
@@ -443,6 +448,7 @@ function App() {
                   >
                     <option value="TODOS" style={dropdownOptionStyle}>Todos</option>
                     <option value="DESPACHO" style={dropdownOptionStyle}>Despacho</option>
+                    <option value="REFERENCIA" style={dropdownOptionStyle}>Referencia</option>
                     <option value="FECHA" style={dropdownOptionStyle}>Fecha</option>
                     <option value="ID" style={dropdownOptionStyle}>ID</option>
                   </select>
@@ -475,7 +481,8 @@ function App() {
                     <input
                       placeholder={searchField === 'ID' ? 'Ej: 123' :
                         searchField === 'DESPACHO' ? 'Ej: 25033ZFE...' :
-                          'Despacho, fecha (YYYY-MM), o ID'}
+                        searchField === 'REFERENCIA' ? 'Ej: AR25-JUL-FA25-J01 AS2' :
+                          'Despacho, referencia, fecha (YYYY-MM), o ID'}
                       className="px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
                       value={searchText}
                       onChange={(e) => setSearchText(e.target.value)}
