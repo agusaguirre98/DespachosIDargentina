@@ -466,12 +466,10 @@ def crear_despacho():
         fallback_oc = (datos.get("OC_ID") or datos.get("oc_id") or "").strip()
         if not oc_ids and fallback_oc:
             oc_ids = [fallback_oc]
-        if not oc_ids:
-            return jsonify({"error": "OC_ID es obligatorio."}), 400
         for oc_id in oc_ids:
             if not oc_existe_en_asignador(oc_id):
                 return jsonify({"error": f"OC_ID inexistente en Asignador: {oc_id}"}), 404
-        primary_oc_id = oc_ids[0]
+        primary_oc_id = oc_ids[0] if oc_ids else None
 
         # Referencia opcional (complemento del OC_ID)
         referencia = (datos.get("Referencia") or datos.get("referencia") or "").strip() or None

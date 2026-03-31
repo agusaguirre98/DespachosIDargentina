@@ -130,8 +130,6 @@ export default function CreateDespacho({ volverAtras, onCreado }) {
     if (!formData.Fecha) return setMensaje("Ingresá la fecha.");
     if (!formData.TipoDespacho)
       return setMensaje("Seleccioná el tipo de despacho.");
-    if (!ocIdList.length)
-      return setMensaje("Seleccioná al menos una OC.");
 
     try {
       setCreatingDespacho(true);
