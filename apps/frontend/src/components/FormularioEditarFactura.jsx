@@ -25,23 +25,26 @@ const parseNumber = (s = "") => {
   return Number(t.replace(/,/g, ""));
 };
 
+const buildFormData = (source = {}) => ({
+  TipoGasto: source?.TipoGasto || "",
+  Fecha: source?.Fecha || "",
+  Invoice: source?.Invoice || "",
+  nroFactura: source?.nroFactura || "",
+  OrdenPO: source?.OrdenPO || "",
+  Importe: source?.Importe ?? "",
+  Moneda: source?.Moneda || "ARS",
+  SIMI_SIRA: source?.SIMI_SIRA || "",
+  Descripcion: source?.Descripcion || "",
+  Despacho: source?.Despacho || "",
+  BL: source?.BL || "",
+  Mercaderia: source?.Mercaderia || "",
+  Proveedor: source?.Proveedor || "",
+  nroProveedor: source?.nroProveedor || "",
+});
+
 const FormularioEditarFactura = ({ volverAtras, factura }) => {
-  const [formData, setFormData] = useState({
-    TipoGasto: factura?.TipoGasto || "",
-    Fecha: factura?.Fecha || "",
-    Invoice: factura?.Invoice || "",
-    nroFactura: factura?.nroFactura || "",
-    OrdenPO: factura?.OrdenPO || "",
-    Importe: factura?.Importe ?? "",
-    Moneda: factura?.Moneda || "ARS",
-    SIMI_SIRA: factura?.SIMI_SIRA || "",
-    Descripcion: factura?.Descripcion || "",
-    Despacho: factura?.Despacho || "",
-    BL: factura?.BL || "",
-    Mercaderia: factura?.Mercaderia || "",
-    Proveedor: factura?.Proveedor || "",
-    nroProveedor: factura?.nroProveedor || "",
-  });
+  const [facturaData, setFacturaData] = useState(factura || null);
+  const [formData, setFormData] = useState(buildFormData(factura));
 
   const [archivo, setArchivo] = useState(null);
   const [tiposGastoList, setTiposGastoList] = useState([]);
@@ -117,6 +120,31 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
   useEffect(() => {
     fetchLists();
   }, []);
+
+
+  useEffect(() => {
+    setFacturaData(factura || null);
+    setFormData(buildFormData(factura));
+  }, [factura]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!factura?.ID) return;
+      try {
+        const r = await fetch(`/api/facturas/${factura.ID}`);
+        const data = await r.json();
+        if (!r.ok || !alive) return;
+        setFacturaData(data);
+        setFormData(buildFormData(data));
+      } catch {
+        // Si falla la carga completa, mantenemos los datos de la grilla para no bloquear la edici?n.
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [factura?.ID]);
 
   // ⬇️ Nuevo: traer cantidad de despachos vinculados a esta factura (vía tabla puente)
   useEffect(() => {
@@ -489,16 +517,16 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
           {/* Adjunto existente */}
           <div className="mb-4 rounded-lg border border-white/10 bg-white/5 p-3">
             <div className="text-sm text-slate-300">Documento adjunto</div>
-            {factura?.HasDoc && factura?.DocUrl ? (
+            {facturaData?.HasDoc && facturaData?.DocUrl ? (
               <div className="mt-1 flex items-center gap-3">
                 <a
-                  href={factura.DocUrl}
+                  href={facturaData.DocUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="text-indigo-300 hover:text-indigo-200 underline"
-                  title={factura.DocName || "Ver documento"}
+                  title={facturaData.DocName || "Ver documento"}
                 >
-                  📎 {factura.DocName || "Abrir adjunto"}
+                  📎 {facturaData.DocName || "Abrir adjunto"}
                 </a>
                 <span className="text-xs text-slate-400">(se abrirá en una pestaña nueva)</span>
               </div>
