@@ -66,6 +66,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
   // estados base
   const [archivo, setArchivo] = useState(null);
   const [pdfUrl, setPdfUrl] = useState("");
+  const [dragActive, setDragActive] = useState(false);
   const [tiposGastoList, setTiposGastoList] = useState([]);
   const [despachosList, setDespachosList] = useState([]);
   const [errors, setErrors] = useState({});
@@ -121,11 +122,36 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
     fetchLists();
   }, []);
 
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0] || null;
+  const applySelectedFile = (file) => {
     setArchivo(file);
     if (pdfUrl) URL.revokeObjectURL(pdfUrl);
     setPdfUrl(file && file.type === "application/pdf" ? URL.createObjectURL(file) : "");
+  };
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0] || null;
+    applySelectedFile(file);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!dragActive) setDragActive(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    const file = e.dataTransfer?.files?.[0] || null;
+    if (!file) return;
+    applySelectedFile(file);
   };
 
   // ========= Combobox múltiple de despachos (con búsqueda server-side opcional) =========
@@ -394,31 +420,41 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
         <div className="relative z-10 lg:col-span-5">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
             {/* Selector de archivo + OCR */}
-            <div className="flex items-center gap-3">
-              <input
-                id="pdfFactura"
-                type="file"
-                accept="application/pdf"
-                onChange={handleFileChange}
-                className="sr-only"
-              />
-              <label
-                htmlFor="pdfFactura"
-                className="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-500 whitespace-nowrap"
-              >
-                Seleccionar archivo
-              </label>
-              <div className="text-sm text-slate-100 truncate max-w-[260px]">
-                {archivo ? archivo.name : "Ningún archivo seleccionado"}
+            <div
+              className={`rounded-xl border px-4 py-4 transition-colors ${dragActive ? "border-indigo-400 bg-indigo-500/10" : "border-white/10 bg-white/5"}`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  id="pdfFactura"
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handleFileChange}
+                  className="sr-only"
+                />
+                <label
+                  htmlFor="pdfFactura"
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-500 whitespace-nowrap"
+                >
+                  Seleccionar archivo
+                </label>
+                <div className="text-sm text-slate-100 truncate max-w-[260px]">
+                  {archivo ? archivo.name : "Ningun archivo seleccionado"}
+                </div>
+                <button
+                  type="button"
+                  onClick={procesarOCR}
+                  disabled={!archivo || procesandoOCR}
+                  className="ml-auto px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-slate-50"
+                >
+                  {procesandoOCR ? "Procesando..." : "Procesar OCR"}
+                </button>
               </div>
-              <button
-                type="button"
-                onClick={procesarOCR}
-                disabled={!archivo || procesandoOCR}
-                className="ml-auto px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-slate-50"
-              >
-                {procesandoOCR ? "Procesando…" : "Procesar OCR"}
-              </button>
+              <p className="mt-3 text-sm text-slate-400">
+                Arrastra y suelta un PDF aqui o usa el boton para adjuntarlo.
+              </p>
             </div>
             <p className="mt-2 text-sm text-slate-300">
               Usá OCR para prellenar proveedor, N° y total{" "}
