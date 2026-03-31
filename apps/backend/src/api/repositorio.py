@@ -17,7 +17,7 @@ def listar_repositorio():
         sp.init_site_resources()
 
         raw_path = (request.args.get("path") or "").strip()
-        path = "Despachos" if raw_path in ("", "null", "undefined") else raw_path
+        path = "" if raw_path in ("", "null", "undefined") else raw_path.strip("/")
 
         raw_top = request.args.get("top")
         try:
@@ -42,7 +42,11 @@ def listar_repositorio():
                 "size": it.get("size"),
                 "webUrl": it.get("webUrl"),
                 "lastModifiedDateTime": it.get("lastModifiedDateTime"),
-                "nextPath": f"{path.rstrip('/')}/{it.get('name')}" if "folder" in it else None,
+                "nextPath": (
+                    f"{path.rstrip('/')}/{it.get('name')}".strip("/")
+                    if "folder" in it
+                    else None
+                ),
             }
             for it in data.get("value", [])
         ]
