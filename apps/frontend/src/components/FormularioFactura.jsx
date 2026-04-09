@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo, Fragment } from "react";
+﻿import React, { useEffect, useRef, useState, useMemo, Fragment } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Listbox, Combobox, Transition } from "@headlessui/react";
 import { CheckIcon, ChevronUpDownIcon, XMarkIcon } from "@heroicons/react/24/outline";
@@ -15,7 +15,7 @@ const PROVEEDORES_NO_GRAVADO = [
   "UNLIMITED WORLD S.A.",
 ];
 
-const USE_SERVER_SEARCH = true; // poné false si no querés buscar en /api/despachos/search
+const USE_SERVER_SEARCH = true; // poner false para filtrar todo en cliente
 
 const isFleteInternacional = (v) =>
   (v || "").toString().trim().toLowerCase() === "flete internacional";
@@ -58,7 +58,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
     nroProveedor: "",
   });
 
-  // selección múltiple (IDs como string)
+  // seleccion manual de proveedor
   const [selectedDespachos, setSelectedDespachos] = useState([]); // ["12", "34", ...]
   const [serverSuggestions, setServerSuggestions] = useState([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
@@ -74,9 +74,13 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
   const [enviando, setEnviando] = useState(false);
   const [cargandoListas, setCargandoListas] = useState(true);
   const [procesandoOCR, setProcesandoOCR] = useState(false);
+  const [providerOptions, setProviderOptions] = useState([]);
+  const [loadingProviders, setLoadingProviders] = useState(false);
+  const [providerOpen, setProviderOpen] = useState(false);
 
   // preview responsive
   const panelRef = useRef(null);
+  const providerBoxRef = useRef(null);
   const [panelWidth, setPanelWidth] = useState(0);
   useEffect(() => {
     const update = () => setPanelWidth(panelRef.current?.clientWidth || 0);
@@ -88,9 +92,33 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
 
   useEffect(() => () => { if (pdfUrl) URL.revokeObjectURL(pdfUrl); }, [pdfUrl]);
 
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (!providerBoxRef.current?.contains(event.target)) {
+        setProviderOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
   const setField = (name, value) => {
     setFormData((p) => ({ ...p, [name]: value }));
     if (errors[name]) setErrors((e) => ({ ...e, [name]: undefined }));
+  };
+
+  const loadProviders = async (search = "") => {
+    try {
+      setLoadingProviders(true);
+      const r = await fetch(`/oc/proveedores/select?search=${encodeURIComponent(search)}`);
+      const data = await r.json();
+      if (!r.ok) throw new Error(data?.detail || data?.error || "Error cargando proveedores");
+      setProviderOptions(Array.isArray(data) ? data : []);
+    } catch {
+      setProviderOptions([]);
+    } finally {
+      setLoadingProviders(false);
+    }
   };
 
   useEffect(() => {
@@ -154,7 +182,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
     applySelectedFile(file);
   };
 
-  // ========= Combobox múltiple de despachos (con búsqueda server-side opcional) =========
+  // ========= Combobox multiple de despachos =========
   const [query, setQuery] = useState("");
 
   const debouncedFetch = useMemo(
@@ -252,7 +280,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
     const ids = items.map((it) => String(it.ID));
     setSelectedDespachos(ids);
 
-    // si no hay principal y elegiste alguno, seteo el 1° como principal para compatibilidad
+    // si no hay principal y elegiste alguno, seteo el primero
     if (!formData.Despacho && items.length > 0) {
       setField("Despacho", items[0].Despacho || "");
     }
@@ -274,11 +302,11 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
 
   const validate = () => {
     const e = {};
-    if (!formData.TipoGasto) e.TipoGasto = "Seleccioná un tipo de gasto.";
+    if (!formData.TipoGasto) e.TipoGasto = "Selecciona un tipo de gasto.";
     if (!formData.Fecha) e.Fecha = "La fecha es obligatoria.";
     if (formData.Importe !== "") {
       const n = parseNumber(formData.Importe);
-      if (Number.isNaN(n)) e.Importe = "El importe no tiene un formato válido.";
+      if (Number.isNaN(n)) e.Importe = "El importe no tiene un formato valido.";
     }
     return e;
   };
@@ -300,19 +328,19 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
 
   const procesarOCR = async () => {
     if (!archivo) {
-      setMensaje("Seleccioná un PDF primero.");
+      setMensaje("Selecciona un PDF primero.");
       return;
     }
     try {
       setProcesandoOCR(true);
-      setMensaje("Procesando OCR de factura…");
+      setMensaje("Procesando OCR de factura...");
       const fd = new FormData();
       fd.append("file", archivo);
       const resp = await fetch("/api/ocr/factura?max_pages=1", { method: "POST", body: fd });
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "Error en OCR");
       mergeOCR(data.suggested || {});
-      setMensaje("OCR completado. Revisá los datos.");
+      setMensaje("OCR completado. Revisa los datos.");
     } catch (e) {
       setMensaje(`Error: ${e.message}`);
     } finally {
@@ -340,11 +368,11 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
         if (v !== "" && v !== null && v !== undefined) dataToSend.append(k, v);
       });
 
-      // Enviar múltiples "Despachos" (IDs) para la tabla puente
+      // Enviar multiples IDs si existen
       if (selectedDespachos.length > 0) {
         selectedDespachos.forEach((val) => dataToSend.append("Despachos", String(val)));
 
-        // si no hay principal, usar el código del primero seleccionado
+        // si no hay principal, usar el codigo del primero
         if (!formData.Despacho) {
           const first = byId.get(String(selectedDespachos[0]));
           if (first?.Despacho) dataToSend.append("Despacho", first.Despacho);
@@ -358,12 +386,12 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
       const data = await resp.json();
       if (!resp.ok) throw new Error(data?.error || "Error al guardar la factura.");
 
-      setMensaje("✅ Factura guardada con éxito.");
+      setMensaje("Factura guardada con exito.");
       setArchivo(null);
       setPdfUrl("");
       volverAtras();
     } catch (err) {
-      setMensaje(`❌ ${err.message || "No se pudo conectar con el servidor."}`);
+      setMensaje(`Error: ${err.message || "No se pudo conectar con el servidor."}`);
     } finally {
       setEnviando(false);
     }
@@ -398,17 +426,17 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
         <div className="mb-4 text-sm p-3 rounded-lg bg-black/30 text-slate-100">{mensaje}</div>
       )}
 
-      {/* Aviso dinámico para Flete Internacional */}
+      {/* Aviso dinamico para NO GRAVADO */}
       {requiereNoGravado && (
         <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4">
           <div className="text-amber-200 text-sm font-medium">Modo Flete Internacional</div>
           <div className="text-amber-100/90 text-sm mt-1">
-            Recordá ingresar en <b>Importe</b> el monto que figura como <b>“NO GRAVADO”</b>.
+            Recorda que para este tipo de gasto el importe va como <b>"NO GRAVADO"</b>.
           </div>
           {proveedorEspecial && (
             <div className="text-amber-100/90 text-xs mt-2">
               Detectado proveedor especial ({formData.Proveedor}). En estas facturas el valor
-              válido suele ser el de <b>“NO GRAVADO”</b>.
+              debe informarse como <b>"NO GRAVADO"</b>.
             </div>
           )}
         </div>
@@ -457,8 +485,8 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
               </p>
             </div>
             <p className="mt-2 text-sm text-slate-300">
-              Usá OCR para prellenar proveedor, N° y total{" "}
-              {requiereNoGravado && <b>— tomaremos “NO GRAVADO” si aplica.</b>}
+              Usa OCR para prellenar proveedor, Nro y total{" "}
+              {requiereNoGravado && <b>- tomaremos "NO GRAVADO" si aplica.</b>}
             </p>
           </div>
 
@@ -531,7 +559,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                 </div>
                 <div>
                   <label htmlFor="Importe" className="block text-sm mb-1">
-                    Importe {requiereNoGravado && <span className="opacity-80">(usar “NO GRAVADO”)</span>}
+                    Importe {requiereNoGravado && <span className="opacity-80">(usar "NO GRAVADO")</span>}
                   </label>
                   <input
                     id="Importe"
@@ -549,19 +577,55 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
 
               {/* Datos texto */}
               <div className="grid md:grid-cols-2 gap-4">
-                <div>
+                <div ref={providerBoxRef} className="relative">
                   <label htmlFor="Proveedor" className="block text-sm mb-1">Proveedor</label>
                   <input
                     id="Proveedor"
                     name="Proveedor"
                     value={formData.Proveedor}
-                    onChange={(e) => setField("Proveedor", e.target.value)}
+                    onFocus={() => {
+                      setProviderOpen(true);
+                      loadProviders(formData.Proveedor || "");
+                    }}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setField("Proveedor", value);
+                      setProviderOpen(true);
+                      loadProviders(value);
+                    }}
                     className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none text-slate-100"
                     placeholder="Ej: GESTION FORWARD SRL"
+                    autoComplete="off"
                   />
+                  {providerOpen && (
+                    <div className="absolute z-40 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-white/10 bg-slate-900 shadow-xl">
+                      {loadingProviders ? (
+                        <div className="px-3 py-2 text-sm text-slate-300">Buscando proveedores...</div>
+                      ) : providerOptions.length > 0 ? (
+                        providerOptions.map((provider) => (
+                          <button
+                            key={`${provider.CODPROVEEDOR}-${provider.RAZON_SOCIAL}`}
+                            type="button"
+                            className="flex w-full flex-col items-start px-3 py-2 text-left hover:bg-white/10"
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              setField("Proveedor", provider.RAZON_SOCIAL || "");
+                              setField("nroProveedor", (provider.CODPROVEEDOR ?? "").toString());
+                              setProviderOpen(false);
+                            }}
+                          >
+                            <span className="text-sm text-slate-100">{provider.RAZON_SOCIAL || "-"}</span>
+                            <span className="text-xs text-slate-400">Codigo: {provider.CODPROVEEDOR || "-"}</span>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-3 py-2 text-sm text-slate-400">No se encontraron proveedores.</div>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div>
-                  <label htmlFor="nroFactura" className="block text-sm mb-1">N° Factura</label>
+                  <label htmlFor="nroFactura" className="block text-sm mb-1">Nro Factura</label>
                   <input
                     id="nroFactura"
                     name="nroFactura"
@@ -569,6 +633,17 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                     onChange={(e) => setField("nroFactura", e.target.value)}
                     className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none text-slate-100"
                     placeholder="Ej: F0001-12345678"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="Invoice" className="block text-sm mb-1">Invoice</label>
+                  <input
+                    id="Invoice"
+                    name="Invoice"
+                    value={formData.Invoice}
+                    onChange={(e) => setField("Invoice", e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none text-slate-100"
+                    placeholder="Ej: AD0250603"
                   />
                 </div>
                 <div>
@@ -592,7 +667,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <label htmlFor="Descripcion" className="block text-sm mb-1">Descripción</label>
+                  <label htmlFor="Descripcion" className="block text-sm mb-1">Descripcion</label>
                   <input
                     id="Descripcion"
                     name="Descripcion"
@@ -666,11 +741,11 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                   </Listbox>
                 </div>
 
-                {/* Combobox múltiple oscuro */}
+                {/* Combobox multiple de despachos */}
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm">
-                      Vincular a varios despachos (múltiple)
+                      Vincular a varios despachos (multiple)
                       {selectedDespachos.length > 0 && (
                         <span className="ml-2 text-xs text-slate-400">({selectedDespachos.length} seleccionados)</span>
                       )}
@@ -681,7 +756,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                         onClick={() => setSelectedDespachos([])}
                         className="text-xs text-slate-300 hover:text-slate-100 underline"
                       >
-                        Limpiar selección
+                        Limpiar seleccion
                       </button>
                     )}
                   </div>
@@ -708,7 +783,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                           ))}
                           <Combobox.Input
                             className="flex-1 min-w-[160px] bg-transparent outline-none placeholder:text-slate-400 text-sm px-1"
-                            placeholder="Escribí para buscar (ej: 25001IC...)"
+                            placeholder="Escribi para buscar (ej: 25001IC...)"
                             displayValue={() => ""}
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={(e) => {
@@ -754,7 +829,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                         {((query && suggestions.length > 0) || loadingSuggestions) && (
                           <Combobox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-slate-900/95 text-slate-100 shadow-lg ring-1 ring-black/10 focus:outline-none">
                             {loadingSuggestions && (
-                              <div className="px-3 py-2 text-xs text-slate-300">Buscando…</div>
+                              <div className="px-3 py-2 text-xs text-slate-300">Buscando...</div>
                             )}
                             {suggestions.map((d) => (
                               <Combobox.Option
@@ -779,8 +854,8 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                   </Combobox>
 
                   <p className="text-xs text-slate-400 mt-2">
-                    Se crearán vínculos en la tabla puente. Si no elegís un despacho principal y
-                    seleccionás varios, se usará el primero como principal para compatibilidad.
+                    Se crearan vinculos en la tabla puente. Si no elegis un despacho principal y
+                    seleccionas varios, se usara el primero como principal para compatibilidad.
                   </p>
                 </div>
               </div>
@@ -810,19 +885,19 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
         <div className="relative z-0 lg:col-span-7">
           <div className="sticky top-20 h-[calc(100vh-120px)]">
             <div ref={panelRef} className="h-full rounded-2xl border border-white/10 bg-white/5 p-4 flex flex-col">
-              <div className="text-sm text-slate-300 mb-2">Vista previa PDF — Página 1</div>
+              <div className="text-sm text-slate-300 mb-2">Vista previa PDF - Pagina 1</div>
               <div className="flex-1 overflow-auto">
                 {pdfUrl ? (
                   <Document
                     file={pdfUrl}
                     onLoadError={(e) => console.error("Error al cargar PDF:", e?.message || e)}
-                    loading={<div className="text-slate-400">Cargando PDF…</div>}
+                    loading={<div className="text-slate-400">Cargando PDF...</div>}
                   >
                     <Page pageNumber={1} width={panelWidth} renderAnnotationLayer={false} renderTextLayer={false} />
                   </Document>
                 ) : (
                   <div className="h-full grid place-items-center text-slate-400">
-                    Seleccioná un PDF para ver la vista previa aquí.
+                    Selecciona un PDF para ver la vista previa aqui.
                   </div>
                 )}
               </div>
@@ -834,7 +909,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                     rel="noreferrer"
                     className="text-xs text-indigo-300 hover:text-indigo-200 underline"
                   >
-                    Abrir en pestaña nueva
+                    Abrir en pestana nueva
                   </a>
                 </div>
               )}
@@ -847,3 +922,5 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
 };
 
 export default FormularioFactura;
+
+

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 
-// Worker recomendado (mismo patrón que en alta de facturas)
+// Worker recomendado (mismo patrÃƒÂ¯Ã‚Â¿Ã‚Â½n que en alta de facturas)
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "/node_modules/pdfjs-dist/build/pdf.worker.min.mjs",
   import.meta.url
@@ -53,7 +53,7 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
   const [enviando, setEnviando] = useState(false);
   const [procesando, setProcesando] = useState(false);
 
-  // ⬇️ Nuevo: estado para eliminar y para mostrar vínculos
+  // ÃƒÂ¯Ã‚Â¿Ã‚Â½! Nuevo: estado para eliminar y para mostrar vÃƒÂ¯Ã‚Â¿Ã‚Â½nculos
   const [eliminando, setEliminando] = useState(false);
   const [checkingLinks, setCheckingLinks] = useState(false);
   const [linkedCount, setLinkedCount] = useState(0);
@@ -146,7 +146,7 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
     };
   }, [factura?.ID]);
 
-  // ⬇️ Nuevo: traer cantidad de despachos vinculados a esta factura (vía tabla puente)
+  // ÃƒÂ¯Ã‚Â¿Ã‚Â½! Nuevo: traer cantidad de despachos vinculados a esta factura (vÃƒÂ¯Ã‚Â¿Ã‚Â½a tabla puente)
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -181,7 +181,7 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
   }, [formData.Proveedor]);
 
   const mergeOCR = (sug = {}) => {
-    // Sólo completa campos vacíos del form
+    // SÃƒÂ¯Ã‚Â¿Ã‚Â½lo completa campos vacÃƒÂ¯Ã‚Â¿Ã‚Â½os del form
     setFormData((prev) => ({
       ...prev,
       Fecha:
@@ -198,19 +198,19 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
 
   const procesarOCR = async () => {
     if (!archivo) {
-      setMensaje("Seleccioná un PDF primero.");
+      setMensaje("SeleccionÃƒÂ¯Ã‚Â¿Ã‚Â½ un PDF primero.");
       return;
     }
     try {
       setProcesando(true);
-      setMensaje("Procesando OCR de factura…");
+      setMensaje("Procesando OCR de facturaÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½");
       const fd = new FormData();
       fd.append("file", archivo);
       const resp = await fetch("/api/ocr/factura?max_pages=1", { method: "POST", body: fd });
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "Error en OCR");
       mergeOCR(data.suggested || {});
-      setMensaje("OCR completado. Revisá los datos.");
+      setMensaje("OCR completado. RevisÃƒÂ¯Ã‚Â¿Ã‚Â½ los datos.");
     } catch (e) {
       console.error(e);
       setMensaje(`Error: ${e.message}`);
@@ -237,7 +237,7 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
         url = `/api/facturas/${factura.ID}`;
         method = "PUT";
         const payload = { ...formData };
-        // normalizar importe a número string
+        // normalizar importe a nÃƒÂ¯Ã‚Â¿Ã‚Â½mero string
         const n = typeof payload.Importe === "number" ? payload.Importe : parseNumber(payload.Importe);
         payload.Importe = n !== null && !Number.isNaN(n) ? String(n) : "";
         body = JSON.stringify(payload);
@@ -263,24 +263,24 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Error guardando factura");
 
-      setMensaje("✅ Factura guardada con éxito.");
+      setMensaje("ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½& Factura guardada con ÃƒÂ¯Ã‚Â¿Ã‚Â½xito.");
       volverAtras();
     } catch (err) {
-      setMensaje(`❌ ${err.message}`);
+      setMensaje(`ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ ${err.message}`);
     } finally {
       setEnviando(false);
     }
   };
 
-  // ⬇️ Nuevo: eliminar factura
+  // ÃƒÂ¯Ã‚Â¿Ã‚Â½! Nuevo: eliminar factura
   const handleDelete = async () => {
     if (!factura?.ID) return;
 
     const warn = linkedCount > 0
-      ? `Esta factura está vinculada a ${linkedCount} despacho(s).
-Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se borran).
-¿Seguro que querés continuar?`
-      : "¿Eliminar esta factura de forma permanente?";
+      ? `Esta factura estÃƒÂ¯Ã‚Â¿Ã‚Â½ vinculada a ${linkedCount} despacho(s).
+Se eliminarÃƒÂ¯Ã‚Â¿Ã‚Â½ la factura y sus vÃƒÂ¯Ã‚Â¿Ã‚Â½nculos en la tabla puente (los despachos NO se borran).
+ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½Seguro que querÃƒÂ¯Ã‚Â¿Ã‚Â½s continuar?`
+      : "ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½Eliminar esta factura de forma permanente?";
 
     if (!window.confirm(warn)) return;
 
@@ -293,7 +293,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       volverAtras?.();
     } catch (e) {
-      setMensaje(`❌ ${e.message || "No se pudo eliminar la factura."}`);
+      setMensaje(`ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ ${e.message || "No se pudo eliminar la factura."}`);
     } finally {
       setEliminando(false);
     }
@@ -313,7 +313,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
           </button>
 
           <div className="flex items-center gap-3">
-            {/* pill de vínculos */}
+            {/* pill de vÃƒÂ¯Ã‚Â¿Ã‚Â½nculos */}
             {factura?.ID && !checkingLinks && (
               linkedCount > 0 ? (
                 <span className="inline-flex items-center px-2 py-1 rounded-full bg-amber-600/30 border border-amber-400/40 text-xs">
@@ -331,16 +331,16 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
           </div>
         </div>
 
-        {/* Aviso dinámico para Flete Internacional */}
+        {/* Aviso dinÃƒÂ¯Ã‚Â¿Ã‚Â½mico para Flete Internacional */}
         {requiereNoGravado && (
           <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4">
             <div className="text-amber-200 text-sm font-medium">Modo Flete Internacional</div>
             <div className="text-amber-100/90 text-sm mt-1">
-              Recordá ingresar en <b>Importe</b> el monto que figura como <b>“NO GRAVADO”</b> en la factura.
+              RecordÃƒÂ¯Ã‚Â¿Ã‚Â½ ingresar en <b>Importe</b> el monto que figura como <b>ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½NO GRAVADOÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½</b> en la factura.
             </div>
             {proveedorEspecial && (
               <div className="text-amber-100/90 text-xs mt-2">
-                Detectado proveedor especial ({formData.Proveedor}). En estas facturas el valor válido suele ser el de <b>“NO GRAVADO”</b>.
+                Detectado proveedor especial ({formData.Proveedor}). En estas facturas el valor vÃƒÂ¯Ã‚Â¿Ã‚Â½lido suele ser el de <b>ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½NO GRAVADOÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½</b>.
               </div>
             )}
           </div>
@@ -353,7 +353,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
               Seleccionar archivo
             </label>
             <div className="text-sm text-slate-300 truncate max-w-[280px]">
-              {archivo ? archivo.name : "Ningún archivo seleccionado"}
+              {archivo ? archivo.name : "Ningun archivo seleccionado"}
             </div>
             <button
               type="button"
@@ -361,11 +361,11 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
               disabled={!archivo || procesando || enviando || eliminando}
               className="ml-auto px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-50"
             >
-              {procesando ? "Procesando…" : "Procesar OCR"}
+              {procesando ? "Procesando..." : "Procesar OCR"}
             </button>
           </div>
           <p className="mt-2 text-sm text-slate-400">
-            Usá OCR para prellenar proveedor, N° y total. {requiereNoGravado && <b>Tomaremos “NO GRAVADO” si aplica.</b>}
+            Usa OCR para prellenar proveedor, Nro y total. {requiereNoGravado && <b>Tomaremos "NO GRAVADO" si aplica.</b>}
           </p>
         </div>
 
@@ -419,7 +419,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
               />
             </div>
             <div>
-              <label className="text-sm">N° Factura</label>
+              <label className="text-sm">Nro Factura</label>
               <input
                 value={formData.nroFactura}
                 onChange={(e) => setField("nroFactura", e.target.value)}
@@ -430,6 +430,15 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
 
           {/* Fila 3: Moneda + Importe */}
           <div className="grid md:grid-cols-3 gap-4">
+            <div>
+              <label className="text-sm">Invoice</label>
+              <input
+                value={formData.Invoice}
+                onChange={(e) => setField("Invoice", e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
+                placeholder="Ej: AD0250603"
+              />
+            </div>
             <div>
               <label className="text-sm">Moneda</label>
               <select
@@ -443,7 +452,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
             </div>
             <div className="md:col-span-2">
               <label className="text-sm">
-                Importe {requiereNoGravado && <span className="opacity-80">(usar “NO GRAVADO”)</span>}
+                Importe {requiereNoGravado && <span className="opacity-80">(usar "NO GRAVADO")</span>}
               </label>
               <input
                 value={formData.Importe}
@@ -454,7 +463,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
             </div>
           </div>
 
-          {/* Más campos */}
+          {/* Mas campos */}
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm">Despacho</label>
@@ -496,7 +505,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
               />
             </div>
             <div>
-              <label className="text-sm">Mercadería</label>
+              <label className="text-sm">Mercaderia</label>
               <input
                 value={formData.Mercaderia}
                 onChange={(e) => setField("Mercaderia", e.target.value)}
@@ -506,7 +515,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
           </div>
 
           <div>
-            <label className="text-sm">Descripción</label>
+            <label className="text-sm">Descripcion</label>
             <input
               value={formData.Descripcion}
               onChange={(e) => setField("Descripcion", e.target.value)}
@@ -526,9 +535,9 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
                   className="text-indigo-300 hover:text-indigo-200 underline"
                   title={facturaData.DocName || "Ver documento"}
                 >
-                  📎 {facturaData.DocName || "Abrir adjunto"}
+                  ÃƒÂ¯Ã‚Â¿Ã‚Â½xÃƒÂ¯Ã‚Â¿Ã‚Â½S} {facturaData.DocName || "Abrir adjunto"}
                 </a>
-                <span className="text-xs text-slate-400">(se abrirá en una pestaña nueva)</span>
+                <span className="text-xs text-slate-400">(se abrirÃƒÂ¯Ã‚Â¿Ã‚Â½ en una pestaÃƒÂ¯Ã‚Â¿Ã‚Â½a nueva)</span>
               </div>
             ) : (
               <div className="mt-1 text-slate-400 text-sm">No hay documento adjunto.</div>
@@ -542,7 +551,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
               disabled={enviando || eliminando}
               className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50"
             >
-              {enviando ? "Guardando…" : "Guardar"}
+              {enviando ? "GuardandoÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½" : "Guardar"}
             </button>
 
             <button
@@ -554,14 +563,14 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
               Cancelar
             </button>
 
-            {/* Botón ELIMINAR (solo en edición) */}
+            {/* BotÃƒÂ¯Ã‚Â¿Ã‚Â½n ELIMINAR (solo en ediciÃƒÂ¯Ã‚Â¿Ã‚Â½n) */}
             {factura?.ID && (
               <button
                 type="button"
                 onClick={handleDelete}
                 disabled={enviando || eliminando}
                 className="ml-auto px-4 py-2 rounded-lg bg-rose-700 text-white hover:bg-rose-600 disabled:opacity-50"
-                title={linkedCount > 0 ? "Eliminar (también eliminará los vínculos a despachos)" : "Eliminar factura"}
+                title={linkedCount > 0 ? "Eliminar (tambiÃƒÂ¯Ã‚Â¿Ã‚Â½n eliminarÃƒÂ¯Ã‚Â¿Ã‚Â½ los vÃƒÂ¯Ã‚Â¿Ã‚Â½nculos a despachos)" : "Eliminar factura"}
               >
                 {eliminando ? "Eliminando..." : "Eliminar"}
               </button>
@@ -576,18 +585,18 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
       <div className="lg:col-span-6">
         <div className="sticky top-20 h-[calc(100vh-120px)]" ref={panelRef}>
           <div className="h-full rounded-xl border border-white/10 bg-white/5 p-4 flex flex-col">
-            <div className="text-sm mb-2">Vista previa PDF — Página 1</div>
+            <div className="text-sm mb-2">Vista previa PDF - Pagina 1</div>
             <div className="flex-1 overflow-auto rounded bg-black/60">
               {pdfPreviewUrl ? (
                 <Document
                   file={pdfPreviewUrl}
                   onLoadError={(err) => console.error("PDF error:", err)}
-                  loading={<div className="p-4">Cargando PDF…</div>}
+                  loading={<div className="p-4">Cargando PDF...</div>}
                 >
                   <Page pageNumber={1} width={panelWidth} renderTextLayer={false} renderAnnotationLayer={false} />
                 </Document>
               ) : (
-                <div className="p-4 text-slate-400">Seleccioná un PDF para ver aquí.</div>
+                <div className="p-4 text-slate-400">Selecciona un PDF para ver aqui.</div>
               )}
             </div>
             {pdfPreviewUrl && (
@@ -598,7 +607,7 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
                   rel="noreferrer"
                   className="text-xs underline"
                 >
-                  Abrir en pestaña nueva
+                  Abrir en pestana nueva
                 </a>
               </div>
             )}
@@ -610,3 +619,4 @@ Se eliminará la factura y sus vínculos en la tabla puente (los despachos NO se
 };
 
 export default FormularioEditarFactura;
+
