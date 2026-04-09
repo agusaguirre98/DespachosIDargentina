@@ -20,6 +20,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
   const [totalItems, setTotalItems] = useState(0);
 
   const [searchText, setSearchText] = useState("");
+  const [updatingRegistrado, setUpdatingRegistrado] = useState({});
 
   const optionClasses = "bg-slate-900 text-slate-100";
 
@@ -32,6 +33,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
     Importe: { asc: "importe_asc", desc: "importe_desc" },
     Adjunto: { asc: "adjunto_asc", desc: "adjunto_desc" },
     Despacho: { asc: "despacho_asc", desc: "despacho_desc" },
+    Registrado: { asc: "registrado_asc", desc: "registrado_desc" },
     Vinculos: { asc: "vinculos_asc", desc: "vinculos_desc" },
   };
 
@@ -76,6 +78,37 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
   };
 
   const rows = useMemo(() => items, [items]);
+
+  const toggleRegistrado = async (facturaId, checked) => {
+    try {
+      setError("");
+      setUpdatingRegistrado((prev) => ({ ...prev, [facturaId]: true }));
+
+      const response = await fetch(`/api/facturas/${facturaId}/registrado`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registrado: checked ? 1 : 0 }),
+      });
+      const data = await response.json();
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "No se pudo actualizar el estado registrado");
+      }
+
+      setItems((prev) =>
+        prev.map((item) =>
+          item.ID === facturaId ? { ...item, Registrado: checked } : item
+        )
+      );
+    } catch (e) {
+      setError(e.message || "Error actualizando registrado");
+    } finally {
+      setUpdatingRegistrado((prev) => {
+        const next = { ...prev };
+        delete next[facturaId];
+        return next;
+      });
+    }
+  };
 
   const totalPages = Math.max(1, Math.ceil(totalItems / limit));
   const pageToDisplay = Math.min(page, totalPages);
@@ -125,7 +158,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
     return (
       <div className="max-w-7xl mx-auto">
         <ErrorBoundary>
-         <FormularioFactura volverAtras={volverListado} despachoInicial={despachoInicial} />
+          <FormularioFactura volverAtras={volverListado} despachoInicial={despachoInicial} />
         </ErrorBoundary>
       </div>
     );
@@ -236,7 +269,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
       )}
 
       {cargando ? (
-        <p className="text-slate-300">Cargando…</p>
+        <p className="text-slate-300">Cargando...</p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-white/10">
           <table className="min-w-full text-sm">
@@ -290,6 +323,12 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
                     {renderSortIndicator("Despacho")}
                   </button>
                 </th>
+                <th className="text-center p-3" aria-sort={getAriaSort("Registrado")}>
+                  <button type="button" onClick={() => toggleSort("Registrado")} className="mx-auto flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por registrado">
+                    Registrado
+                    {renderSortIndicator("Registrado")}
+                  </button>
+                </th>
                 <th className="text-left p-3" aria-sort={getAriaSort("Vinculos")}>
                   <button type="button" onClick={() => toggleSort("Vinculos")} className="flex items-center gap-2 font-medium text-slate-100 hover:text-white focus:outline-none" title="Ordenar por vinculos">
                     Vinculos
@@ -324,6 +363,16 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
                     )}
                   </td>
                   <td className="p-3">{f.Despacho || ""}</td>
+                  <td className="p-3 text-center">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 accent-emerald-500 cursor-pointer disabled:cursor-not-allowed"
+                      checked={Boolean(f.Registrado)}
+                      disabled={Boolean(updatingRegistrado[f.ID])}
+                      onChange={(e) => toggleRegistrado(f.ID, e.target.checked)}
+                      aria-label={`Marcar factura ${f.ID} como registrada`}
+                    />
+                  </td>
                   <td className="p-3">
                     {f.HasDoc && f.DocUrl ? (
                       <a
@@ -355,7 +404,7 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
 
               {!rows.length && (
                 <tr>
-                  <td className="p-4 text-center text-slate-400" colSpan={10}>
+                  <td className="p-4 text-center text-slate-400" colSpan={11}>
                     No hay facturas para mostrar.
                   </td>
                 </tr>
@@ -369,4 +418,3 @@ const PaginaFacturas = ({ despachoInicial = null }) => {
 };
 
 export default PaginaFacturas;
-

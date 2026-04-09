@@ -67,6 +67,29 @@ def oc_select():
 # ---------------------------------------------------
 # DEBUG VIEW
 # ---------------------------------------------------
+@oc_bp.get("/proveedores/select")
+def proveedores_select():
+    q = (request.args.get("search") or "").strip()
+    pattern = f"%{q}%"
+
+    sql = text("""
+        SELECT TOP 25
+            H.CODIGO       AS CODPROVEEDOR,
+            H.RAZON_SOCIAL AS RAZON_SOCIAL
+        FROM dbo.ERP_PROVEEDORES AS H
+        WHERE (:search = '' OR H.RAZON_SOCIAL LIKE :pattern OR CAST(H.CODIGO AS NVARCHAR(50)) LIKE :pattern)
+        ORDER BY H.RAZON_SOCIAL ASC, H.CODIGO ASC
+    """)
+
+    try:
+        eng = ext.init_engine_asignador()
+        with eng.connect() as conn:
+            rows = conn.execute(sql, {"search": q, "pattern": pattern}).mappings().all()
+        return jsonify([dict(r) for r in rows])
+    except Exception as exc:
+        return jsonify({"error": "proveedores/select failed", "detail": str(exc)}), 500
+
+
 @oc_bp.get("/debug-db")
 def oc_debug_db():
     try:

@@ -124,6 +124,8 @@ def facturas_with_links():
             "adjunto_asc": "CASE WHEN f.HasDoc = 1 THEN 1 ELSE 0 END ASC, COALESCE(f.DocName, '') ASC, f.ID ASC",
             "despacho_desc": "COALESCE(f.Despacho, '') DESC, f.ID DESC",
             "despacho_asc": "COALESCE(f.Despacho, '') ASC, f.ID ASC",
+            "registrado_desc": "CASE WHEN ISNULL(f.Registrado, 0) = 1 THEN 1 ELSE 0 END DESC, f.ID DESC",
+            "registrado_asc": "CASE WHEN ISNULL(f.Registrado, 0) = 1 THEN 1 ELSE 0 END ASC, f.ID ASC",
             "vinculos_desc": "COUNT(fd.despacho_id) DESC, f.ID DESC",
             "vinculos_asc": "COUNT(fd.despacho_id) ASC, f.ID ASC",
             "id_desc": "f.ID DESC",
@@ -145,11 +147,11 @@ def facturas_with_links():
                 OR CONVERT(varchar(50), f.Importe) LIKE :query
             """
             params["query"] = f"%{query}%"
-
         sql = f"""
         SELECT
             f.ID, f.Fecha, f.Proveedor, f.nroFactura, f.Invoice,
             f.Moneda, f.Importe, f.DocUrl, f.DocName, f.HasDoc,
+            CAST(ISNULL(f.Registrado, 0) AS bit) AS Registrado,
             f.Despacho,
             f.TipoGasto        AS TipoGastoId,
             tg.TipoGasto       AS TipoGastoNombre,
@@ -161,7 +163,7 @@ def facturas_with_links():
         GROUP BY
             f.ID, f.Fecha, f.Proveedor, f.nroFactura, f.Invoice,
             f.Moneda, f.Importe, f.DocUrl, f.DocName, f.HasDoc,
-            f.Despacho, f.TipoGasto, tg.TipoGasto
+            f.Registrado, f.Despacho, f.TipoGasto, tg.TipoGasto
         {having_clause}
         ORDER BY {order_clause}
         OFFSET :offset ROWS FETCH NEXT :limit ROWS ONLY;
@@ -259,6 +261,24 @@ def get_factura_full(factura_id: int):
         return jsonify({"ok": False, "error": str(exc)}), 500
 
 
+
+@facturas_bp.patch("/facturas/<int:factura_id>/registrado")
+def actualizar_registrado_factura(factura_id: int):
+    try:
+        datos = request.get_json(silent=True) or {}
+        if "registrado" not in datos and "Registrado" not in datos:
+            return jsonify({"ok": False, "error": "Falta el campo registrado"}), 400
+
+        factura = Factura.query.get_or_404(factura_id)
+        valor = as_bool(datos.get("registrado", datos.get("Registrado")))
+        factura.Registrado = valor
+        db.session.commit()
+
+        return jsonify({"ok": True, "id": factura.ID, "Registrado": bool(valor)})
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
 @facturas_bp.route("/facturas/<int:factura_id>", methods=["PUT"])
 def actualizar_factura(factura_id: int):
     try:
@@ -299,6 +319,8 @@ def actualizar_factura(factura_id: int):
             factura.TipoGasto = resolve_tipogasto_id(datos.get("TipoGasto"))
         if "Moneda" in datos:
             factura.Moneda = ((datos.get("Moneda") or "ARS").strip()[:3]).upper()
+        if "Registrado" in datos:
+            factura.Registrado = as_bool(datos.get("Registrado"))
 
         db.session.commit()
 
@@ -406,6 +428,7 @@ def crear_factura():
             Proveedor=(datos.get("Proveedor") or "").strip(),
             nroProveedor=(datos.get("nroProveedor") or "").strip(),
             Moneda=((datos.get("Moneda") or "ARS").strip()[:3]).upper(),
+            Registrado=as_bool(datos.get("Registrado", 0)),
             DocUrl=(uploaded or {}).get("webUrl"),
             DocName=archivo.filename if archivo else None,
             HasDoc=bool(uploaded),
@@ -576,3 +599,4 @@ def get_facturas_linked_por_despacho(despacho_id: int):
         return jsonify({"ok": True, "items": [dict(r) for r in rows]})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc)}), 500
+

@@ -31,12 +31,13 @@ class DespachoResumen(db.Model):
     DocUrl = db.Column("DocUrl", db.String(500), nullable=True)
     DocName = db.Column("DocName", db.String(255), nullable=True)
     HasDoc = db.Column("HasDoc", db.Boolean, default=False, nullable=False)
-    ocs = relationship (
+    ocs = relationship(
         "DespachoOC",
         backref="despacho",
         cascade="all, delete-orphan",
         lazy="selectin",
-        )
+    )
+
 
 class DespachoOC(db.Model):
     __tablename__ = "Despacho_OC"
@@ -84,6 +85,7 @@ class Factura(db.Model):
     DocUrl = db.Column("DocUrl", db.String(500), nullable=True)
     DocName = db.Column("DocName", db.String(255), nullable=True)
     HasDoc = db.Column("HasDoc", db.Boolean, default=False, nullable=False)
+    Registrado = db.Column("Registrado", db.Boolean, default=False, nullable=True)
 
 
 class ResumenGasto(db.Model):
