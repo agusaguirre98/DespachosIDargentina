@@ -1,5 +1,7 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { Fragment, useEffect, useState, useRef, useMemo } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
+import { Combobox, Transition } from "@headlessui/react";
+import { CheckIcon, ChevronUpDownIcon } from "@heroicons/react/24/outline";
 
 // Worker recomendado (mismo patrÃƒÂ¯Ã‚Â¿Ã‚Â½n que en alta de facturas)
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
@@ -49,6 +51,7 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
   const [archivo, setArchivo] = useState(null);
   const [tiposGastoList, setTiposGastoList] = useState([]);
   const [despachosList, setDespachosList] = useState([]);
+  const [principalQuery, setPrincipalQuery] = useState("");
   const [mensaje, setMensaje] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [procesando, setProcesando] = useState(false);
@@ -180,6 +183,24 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
     return PROVEEDORES_NO_GRAVADO.some((p) => normalize(p) === prov);
   }, [formData.Proveedor]);
 
+  const principalSelectedObj = useMemo(() => {
+    if (!formData.Despacho) return null;
+    const found = despachosList.find((d) => normalize(d?.Despacho || "") === normalize(formData.Despacho));
+    return found || { ID: "_custom", Despacho: formData.Despacho };
+  }, [formData.Despacho, despachosList]);
+
+  const principalSuggestions = useMemo(() => {
+    const q = normalize(principalQuery);
+    if (!q) return despachosList;
+    return despachosList.filter((d) => normalize(d?.Despacho || "").includes(q));
+  }, [principalQuery, despachosList]);
+
+  const setPrincipal = (obj) => {
+    setField("Despacho", obj?.Despacho || "");
+    setPrincipalQuery("");
+  };
+
+
   const mergeOCR = (sug = {}) => {
     // SÃƒÂ¯Ã‚Â¿Ã‚Â½lo completa campos vacÃƒÂ¯Ã‚Â¿Ã‚Â½os del form
     setFormData((prev) => ({
@@ -263,24 +284,23 @@ const FormularioEditarFactura = ({ volverAtras, factura }) => {
       const data = await r.json();
       if (!r.ok) throw new Error(data?.error || "Error guardando factura");
 
-      setMensaje("ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½& Factura guardada con ÃƒÂ¯Ã‚Â¿Ã‚Â½xito.");
+      setMensaje("Factura guardada con exito.");
       volverAtras();
     } catch (err) {
-      setMensaje(`ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ ${err.message}`);
+      setMensaje(`Error: ${err.message}`);
     } finally {
       setEnviando(false);
     }
   };
 
-  // ÃƒÂ¯Ã‚Â¿Ã‚Â½! Nuevo: eliminar factura
   const handleDelete = async () => {
     if (!factura?.ID) return;
 
     const warn = linkedCount > 0
-      ? `Esta factura estÃƒÂ¯Ã‚Â¿Ã‚Â½ vinculada a ${linkedCount} despacho(s).
-Se eliminarÃƒÂ¯Ã‚Â¿Ã‚Â½ la factura y sus vÃƒÂ¯Ã‚Â¿Ã‚Â½nculos en la tabla puente (los despachos NO se borran).
-ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½Seguro que querÃƒÂ¯Ã‚Â¿Ã‚Â½s continuar?`
-      : "ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½Eliminar esta factura de forma permanente?";
+      ? `Esta factura esta vinculada a ${linkedCount} despacho(s).
+Se eliminara la factura y sus vinculos en la tabla puente (los despachos no se borran).
+Seguro que queres continuar?`
+      : "Eliminar esta factura de forma permanente?";
 
     if (!window.confirm(warn)) return;
 
@@ -293,10 +313,11 @@ Se eliminarÃƒÂ¯Ã‚Â¿Ã‚Â½ la factura y sus vÃƒÂ¯Ã‚Â¿Ã‚Â
       if (!resp.ok) throw new Error(data?.error || `HTTP ${resp.status}`);
       volverAtras?.();
     } catch (e) {
-      setMensaje(`ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ ${e.message || "No se pudo eliminar la factura."}`);
+      setMensaje(`Error: ${e.message || "No se pudo eliminar la factura."}`);
     } finally {
       setEliminando(false);
     }
+
   };
 
   return (
@@ -336,11 +357,13 @@ Se eliminarÃƒÂ¯Ã‚Â¿Ã‚Â½ la factura y sus vÃƒÂ¯Ã‚Â¿Ã‚Â
           <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 p-4">
             <div className="text-amber-200 text-sm font-medium">Modo Flete Internacional</div>
             <div className="text-amber-100/90 text-sm mt-1">
-              RecordÃƒÂ¯Ã‚Â¿Ã‚Â½ ingresar en <b>Importe</b> el monto que figura como <b>ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½NO GRAVADOÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½</b> en la factura.
+              RecordÃƒÂ¯Ã‚Â¿Ã‚Â½ ingresar en <b>Importe</b> el monto que figura como <b>ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½
+NO GRAVADOÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½</b> en la factura.
             </div>
             {proveedorEspecial && (
               <div className="text-amber-100/90 text-xs mt-2">
-                Detectado proveedor especial ({formData.Proveedor}). En estas facturas el valor vÃƒÂ¯Ã‚Â¿Ã‚Â½lido suele ser el de <b>ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½NO GRAVADOÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½</b>.
+                Detectado proveedor especial ({formData.Proveedor}). En estas facturas el valor vÃƒÂ¯Ã‚Â¿Ã‚Â½lido suele ser el de <b>ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½
+NO GRAVADOÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½ÃƒÂ¯Ã‚Â¿Ã‚Â½</b>.
               </div>
             )}
           </div>
@@ -467,23 +490,67 @@ Se eliminarÃƒÂ¯Ã‚Â¿Ã‚Â½ la factura y sus vÃƒÂ¯Ã‚Â¿Ã‚Â
           <div className="grid md:grid-cols-2 gap-4">
             <div>
               <label className="text-sm">Despacho</label>
-              <select
-                value={formData.Despacho}
-                onChange={(e) => setField("Despacho", e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-white/10 border border-white/20 outline-none"
-              >
-                <option value="" className="bg-slate-900 text-white">
-                  (Opcional)</option>
-                {despachosList.map((d) => (
-                  <option 
-                  key={d.ID} 
-                  value={d.Despacho}
-                  className="bg-slate-900 text-white"
+              <Combobox value={principalSelectedObj} onChange={setPrincipal} nullable>
+                <div className="relative">
+                  <div className="relative w-full rounded-lg bg-white/10 border border-white/20 focus-within:ring-1 focus-within:ring-indigo-400">
+                    <Combobox.Input
+                      className="w-full bg-transparent py-2 pl-3 pr-10 text-left text-slate-100 outline-none placeholder:text-slate-400"
+                      displayValue={(item) => item?.Despacho || formData.Despacho || ""}
+                      onChange={(event) => setPrincipalQuery(event.target.value)}
+                      placeholder="Escribi para buscar un despacho..."
+                    />
+                    <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
+                      <ChevronUpDownIcon className="h-5 w-5 text-slate-300" />
+                    </Combobox.Button>
+                  </div>
+                  <Transition
+                    as={Fragment}
+                    leave="transition ease-in duration-100"
+                    leaveFrom="opacity-100"
+                    leaveTo="opacity-0"
+                    afterLeave={() => setPrincipalQuery("")}
                   >
-                    {d.Despacho}
-                  </option>
-                ))}
-              </select>
+                    <Combobox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-slate-900/95 text-slate-100 shadow-lg ring-1 ring-black/10 focus:outline-none">
+                      <Combobox.Option
+                        value={{ ID: "", Despacho: "" }}
+                        className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-white/10" : ""}`}
+                      >
+                        {({ selected }) => (
+                          <>
+                            <span className="block truncate text-slate-400">(Opcional)</span>
+                            {selected ? (
+                              <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                                <CheckIcon className="h-5 w-5" />
+                              </span>
+                            ) : null}
+                          </>
+                        )}
+                      </Combobox.Option>
+                      {principalSuggestions.map((d) => (
+                        <Combobox.Option
+                          key={d.ID}
+                          value={d}
+                          className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-white/10" : ""}`}
+                        >
+                          {({ selected }) => (
+                            <>
+                              <span className="block truncate">{d.Despacho}</span>
+                              {selected ? (
+                                <span className="absolute inset-y-0 left-0 flex items-center pl-3">
+                                  <CheckIcon className="h-5 w-5" />
+                                </span>
+                              ) : null}
+                            </>
+                          )}
+                        </Combobox.Option>
+                      ))}
+                      {!principalSuggestions.length && (
+                        <div className="px-3 py-2 text-sm text-slate-400">No se encontraron despachos.</div>
+                      )}
+                    </Combobox.Options>
+                  </Transition>
+                </div>
+              </Combobox>
             </div>
             <div>
               <label className="text-sm">Orden PO</label>
@@ -535,9 +602,9 @@ Se eliminarÃƒÂ¯Ã‚Â¿Ã‚Â½ la factura y sus vÃƒÂ¯Ã‚Â¿Ã‚Â
                   className="text-indigo-300 hover:text-indigo-200 underline"
                   title={facturaData.DocName || "Ver documento"}
                 >
-                  ÃƒÂ¯Ã‚Â¿Ã‚Â½xÃƒÂ¯Ã‚Â¿Ã‚Â½S} {facturaData.DocName || "Abrir adjunto"}
+                  {facturaData.DocName || "Abrir adjunto"}
                 </a>
-                <span className="text-xs text-slate-400">(se abrirÃƒÂ¯Ã‚Â¿Ã‚Â½ en una pestaÃƒÂ¯Ã‚Â¿Ã‚Â½a nueva)</span>
+                <span className="text-xs text-slate-400">(se abrira en una pestana nueva)</span>
               </div>
             ) : (
               <div className="mt-1 text-slate-400 text-sm">No hay documento adjunto.</div>

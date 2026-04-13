@@ -92,6 +92,32 @@ def _use_resumen_ancho() -> bool:
     return bool(current_app.config.get("USE_RESUMEN_ANCHO", True))
 
 
+def _normalize_duplicate_key(value: str) -> str:
+    value = (value or "").strip().upper()
+    for ch in (" ", ".", ",", "-", "_", "/", chr(92)):
+        value = value.replace(ch, "")
+    return value
+
+
+def _factura_numero_duplicado(nro_factura: str, proveedor: str, exclude_id: int | None = None) -> bool:
+    numero = _normalize_duplicate_key(nro_factura)
+    proveedor_nombre = _normalize_duplicate_key(proveedor)
+    if not numero or not proveedor_nombre:
+        return False
+
+    query = Factura.query.with_entities(Factura.ID, Factura.nroFactura, Factura.Proveedor)
+    if exclude_id is not None:
+        query = query.filter(Factura.ID != exclude_id)
+
+    for row in query.all():
+        if _normalize_duplicate_key(row.nroFactura or "") != numero:
+            continue
+        if _normalize_duplicate_key(row.Proveedor or "") != proveedor_nombre:
+            continue
+        return True
+    return False
+
+
 @facturas_bp.get("/facturas/with-links")
 def facturas_with_links():
     try:
@@ -288,6 +314,13 @@ def actualizar_factura(factura_id: int):
         datos = request.json
         factura = Factura.query.get_or_404(factura_id)
 
+        nro_factura = (datos.get("nroFactura") if "nroFactura" in datos else factura.nroFactura) or ""
+        proveedor = (datos.get("Proveedor") if "Proveedor" in datos else factura.Proveedor) or ""
+        nro_factura = nro_factura.strip()
+        proveedor = proveedor.strip()
+        if nro_factura and proveedor and _factura_numero_duplicado(nro_factura, proveedor, exclude_id=factura_id):
+            return jsonify({"error": f"Ya existe una factura con el numero {nro_factura} para el proveedor {proveedor}."}), 400
+
         prev_link_ids = set(get_linked_despacho_ids(factura_id))
         prev_despacho_code = normalize_despacho(factura.Despacho or "")
 
@@ -380,6 +413,11 @@ def crear_factura():
 
         tg_id = resolve_tipogasto_id(datos.get("TipoGasto"))
         tg_name = resolve_tipogasto_name(datos.get("TipoGasto")) or "Generales"
+
+        nro_factura = (datos.get("nroFactura") or "").strip()
+        proveedor = (datos.get("Proveedor") or "").strip()
+        if nro_factura and proveedor and _factura_numero_duplicado(nro_factura, proveedor):
+            return jsonify({"error": f"Ya existe una factura con el numero {nro_factura} para el proveedor {proveedor}."}), 400
 
         uploaded = None
 

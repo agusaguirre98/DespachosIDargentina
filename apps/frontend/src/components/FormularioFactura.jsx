@@ -77,6 +77,7 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
   const [providerOptions, setProviderOptions] = useState([]);
   const [loadingProviders, setLoadingProviders] = useState(false);
   const [providerOpen, setProviderOpen] = useState(false);
+  const [principalQuery, setPrincipalQuery] = useState("");
 
   // preview responsive
   const panelRef = useRef(null);
@@ -397,16 +398,22 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
     }
   };
 
-  // ========= Principal Listbox helpers =========
+  // ========= Principal despacho helpers =========
   const principalSelectedObj = useMemo(() => {
     if (!formData.Despacho) return null;
-    // Busco por texto; si no lo encuentro, muestro el texto igualmente
     const found = despachosList.find((d) => (d?.Despacho || "").toUpperCase() === formData.Despacho.toUpperCase());
     return found || { ID: "_custom", Despacho: formData.Despacho };
   }, [formData.Despacho, despachosList]);
 
+  const principalSuggestions = useMemo(() => {
+    const q = normalize(principalQuery);
+    if (!q) return despachosList;
+    return despachosList.filter((d) => normalize(d?.Despacho || "").includes(q));
+  }, [principalQuery, despachosList]);
+
   const setPrincipal = (obj) => {
     setField("Despacho", obj?.Despacho || "");
+    setPrincipalQuery("");
   };
 
   return (
@@ -679,30 +686,34 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                 </div>
               </div>
 
-              {/* Despacho principal (Listbox oscuro) */}
+              {/* Despacho principal buscable */}
               <div className="space-y-3">
                 <div>
                   <label className="block text-sm mb-1">Despacho (principal)</label>
-                  <Listbox value={principalSelectedObj} onChange={setPrincipal}>
+                  <Combobox value={principalSelectedObj} onChange={setPrincipal} nullable>
                     <div className="relative">
-                      <Listbox.Button className="relative w-full cursor-default rounded-lg bg-white/10 py-2 pl-3 pr-10 text-left text-slate-100 border border-white/20 focus:outline-none">
-                        <span className="block truncate">{principalSelectedObj?.Despacho || "(Opcional)"}</span>
-                        <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                      <div className="relative w-full rounded-lg bg-white/10 border border-white/20 focus-within:ring-1 focus-within:ring-indigo-400">
+                        <Combobox.Input
+                          className="w-full bg-transparent py-2 pl-3 pr-10 text-left text-slate-100 outline-none placeholder:text-slate-400"
+                          displayValue={(item) => item?.Despacho || formData.Despacho || ""}
+                          onChange={(event) => setPrincipalQuery(event.target.value)}
+                          placeholder="Escribi para buscar un despacho..."
+                        />
+                        <Combobox.Button className="absolute inset-y-0 right-0 flex items-center pr-2">
                           <ChevronUpDownIcon className="h-5 w-5 text-slate-300" />
-                        </span>
-                      </Listbox.Button>
+                        </Combobox.Button>
+                      </div>
                       <Transition
-                        as="div"
+                        as={Fragment}
                         leave="transition ease-in duration-100"
                         leaveFrom="opacity-100"
                         leaveTo="opacity-0"
+                        afterLeave={() => setPrincipalQuery("")}
                       >
-                        <Listbox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-slate-900/95 text-slate-100 shadow-lg ring-1 ring-black/10 focus:outline-none">
-                          <Listbox.Option
+                        <Combobox.Options className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-lg bg-slate-900/95 text-slate-100 shadow-lg ring-1 ring-black/10 focus:outline-none">
+                          <Combobox.Option
                             value={{ ID: "", Despacho: "" }}
-                            className={({ active }) =>
-                              `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-white/10" : ""}`
-                            }
+                            className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-white/10" : ""}`}
                           >
                             {({ selected }) => (
                               <>
@@ -714,14 +725,12 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                                 ) : null}
                               </>
                             )}
-                          </Listbox.Option>
-                          {despachosList.map((d) => (
-                            <Listbox.Option
+                          </Combobox.Option>
+                          {principalSuggestions.map((d) => (
+                            <Combobox.Option
                               key={d.ID}
                               value={d}
-                              className={({ active }) =>
-                                `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-white/10" : ""}`
-                              }
+                              className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? "bg-white/10" : ""}`}
                             >
                               {({ selected }) => (
                                 <>
@@ -733,12 +742,15 @@ const FormularioFactura = ({ volverAtras, despachoInicial = null }) => {
                                   ) : null}
                                 </>
                               )}
-                            </Listbox.Option>
+                            </Combobox.Option>
                           ))}
-                        </Listbox.Options>
+                          {!principalSuggestions.length && (
+                            <div className="px-3 py-2 text-sm text-slate-400">No se encontraron despachos.</div>
+                          )}
+                        </Combobox.Options>
                       </Transition>
                     </div>
-                  </Listbox>
+                  </Combobox>
                 </div>
 
                 {/* Combobox multiple de despachos */}
